@@ -224,13 +224,19 @@ def _trace(events) -> None:
     events.subscribe(show)
 
 
-def _warn_if_not_enrolled() -> None:
+def _warn_if_not_enrolled(mic: str) -> None:
     from earshot.approvals.hook import get_approver
 
-    if get_approver().scorer is None:
+    scorer = get_approver().scorer
+    if scorer is None:
         console.print(
             "[yellow]No owner voice profile loaded (EARSHOT_OWNER in .env).[/] "
             "Every voice approval will step up to a phone tap."
+        )
+    elif scorer.profile.mic_name != mic:
+        console.print(
+            f"[yellow]You enrolled with '{scorer.profile.mic_name}' but this is '{mic}'.[/] "
+            "Voice scores will be lower. Re-enroll with the mic you'll demo with."
         )
 
 
@@ -332,14 +338,22 @@ def live(
     from earshot.privacy.audience import AudienceTracker, owner_score_fn
 
     tracker = AudienceTracker(score=owner_score_fn())
+
+    def observe(segment) -> None:
+        obs = tracker.observe_segment(segment)
+        if audience and obs is not None:
+            who = {"owner": "you", "other": "other", "unclear": "unclear"}[obs.label]
+            score = "?" if obs.score is None else f"{obs.score:.2f}"
+            console.print(f"  [dim](voice: {who} {score})[/]")
+
     with MicStream() as stream:
-        mic = LiveMic(stream, on_segment=tracker.observe_segment)
+        mic = LiveMic(stream, on_segment=observe)
         tracker.mic_on()
         pipeline = Pipeline(
             phone=PhoneChannel(console_only=not phone), listen=mic.listen, audience=tracker
         )
         pipeline.warm()
-        _warn_if_not_enrolled()
+        _warn_if_not_enrolled(input_device_name())
         serve_in_background(port=port)
         console.print(f"Phone approvals: {env('EARSHOT_PUBLIC_URL', 'http://localhost:8000')}")
         _narrate(bus, show_you=True)

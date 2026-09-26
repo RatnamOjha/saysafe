@@ -1,4 +1,7 @@
-"""Fake executors. Refuse to run without a valid approval token."""
+"""Fake executors. Refuse to run without a valid approval token.
+
+Refused is re-exported here for callers that only know the executor.
+"""
 
 from collections.abc import Callable
 from decimal import Decimal
@@ -7,32 +10,25 @@ from num2words import num2words
 
 from earshot.agent.mock_agent import Reply
 from earshot.approvals.actions import Action
+from earshot.approvals.tokens import Refused, verify_token
 
 
 class MissingApproval(Exception):
     pass
 
 
-class Refused(Exception):
-    def __init__(self, reason: str):
-        self.reason = reason
-        super().__init__(reason)
-
-
 TokenVerifier = Callable[[str, Action], None]  # raises Refused
 
-
-def _no_verification(token: str, action: Action) -> None:
-    # TODO(approvals track): replace with approvals.tokens.verify_token.
-    return None
+__all__ = ["Executor", "MissingApproval", "Refused", "TokenVerifier"]
 
 
 class Executor:
-    def __init__(self, verify_token: TokenVerifier = _no_verification):
+    def __init__(self, verify_token: TokenVerifier = verify_token):
         self.verify_token = verify_token
         self.executed: list[Action] = []
 
     def run(self, action: Action, approval_token: str | None) -> Reply:
+        """Raises MissingApproval or Refused instead of running an unapproved action."""
         if not approval_token:
             raise MissingApproval(f"{action.type} {action.id} has no approval token")
         self.verify_token(approval_token, action)

@@ -10,6 +10,22 @@ def sine(freq: float = 440.0, seconds: float = 1.0, sr: int = SR, amp: float = 0
     return (amp * np.sin(2 * np.pi * freq * t)).astype(np.float32)
 
 
+@pytest.fixture(autouse=True)
+def isolated(tmp_path, monkeypatch):
+    """Keep tests away from real state: audit log, nonce DB, voice profiles."""
+    from earshot.approvals import hook, tokens
+
+    monkeypatch.setenv("EARSHOT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("EARSHOT_PROFILES_DIR", str(tmp_path / "profiles"))
+    monkeypatch.setenv("EARSHOT_OWNER", "nobody")
+    monkeypatch.setenv("EARSHOT_SECRET", "test-secret")
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    tokens.default_service.cache_clear()
+    monkeypatch.setattr(hook, "_approver", None)
+    yield
+    tokens.default_service.cache_clear()
+
+
 @pytest.fixture(scope="session")
 def piper_speech() -> np.ndarray:
     """Real synthesized speech (16 kHz) for VAD/STT/embedding tests. Needs models."""

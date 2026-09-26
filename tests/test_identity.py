@@ -136,3 +136,14 @@ def test_embed_real_speech(piper_speech):
     assert cosine(e.vector, embed(piper_speech[: len(piper_speech) // 2 + 16000]).vector) > 0.7
     with pytest.raises(TooShort):
         embed(piper_speech[:8000])
+
+
+@pytest.mark.models
+def test_short_reply_embeds_with_lower_minimum():
+    from earshot.audio.tts import PiperTTS
+    from earshot.identity.embed import embed
+
+    word = PiperTTS().synthesize("tunnel")  # ~0.4 s of speech
+    with pytest.raises(TooShort):
+        embed(word)
+    assert embed(word, min_speech_s=0.35).vector.shape == (192,)

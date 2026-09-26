@@ -173,31 +173,74 @@ def verify(
 
 
 def _print_turn(result) -> None:
-    if result is None:
+    if result is None or result.action is None:
         return
-    if result.action is not None:
-        a = result.action
-        amount = f" ${a.amount}" if a.amount is not None else ""
-        console.print(f"  [cyan]action[/] {a.type} {a.counterparty or ''}{amount}".rstrip())
-        if result.decision is not None:
-            console.print(f"  [cyan]approval[/] {result.decision.outcome}")
-    if result.speak is not None:
-        s = result.speak
-        if s.spoken_text:
-            console.print(f"  [green]band says[/] {s.spoken_text}  [dim]({s.channel})[/]")
-        if s.phone_text:
-            console.print(f"  [magenta]phone[/] {s.phone_text}")
+    a = result.action
+    amount = f" ${a.amount}" if a.amount is not None else ""
+    console.print(f"  [dim]action {a.type} {a.counterparty or ''}{amount}[/]".rstrip())
+    if result.decision is not None:
+        d = result.decision
+        color = {"approve": "green", "step_up": "yellow", "reject": "red"}[d.outcome]
+        why = f"  ({'; '.join(d.reasons)})" if d.reasons else ""
+        console.print(f"  [{color}]{d.outcome}[/]{why}")
+
+
+def _narrate(events, show_you: bool = False) -> None:
+    """Print what the band says and what reaches the phone, as it happens.
+    show_you: also echo the user's transcript (live mode, where nothing was typed)."""
+
+    def show(e) -> None:
+        if e.type == "transcript" and e.data.get("text") and show_you:
+            console.print(f"[bold]you>[/] {e.data['text']}")
+        elif e.type == "spoken":
+            where = "" if e.data["channel"] == "speaker" else f" [dim]({e.data['channel']})[/]"
+            console.print(f"  [green]band:[/] {e.data['text']}{where}")
+        elif e.type == "phone":
+            console.print(f"  [magenta]phone ({e.data['via']}):[/] {e.data['text']}")
+        elif e.type == "reply_captured":
+            if e.data.get("timed_out"):
+                console.print("  [dim]heard nothing (timed out)[/]")
+            else:
+                secs = e.data.get("speech_seconds")
+                length = f" ({secs:.1f} s)" if secs is not None else ""
+                console.print(f"  [dim]heard {e.data['text']!r}{length}[/]")
+        elif e.type == "speaker_scored":
+            parts = [f"{k} {e.data[k]:.2f}" for k in ("reply", "command", "fused")
+                     if e.data[k] is not None]  # fmt: skip
+            score = ", ".join(parts) if parts else "no voice score"
+            console.print(f"  [dim]voice: {score} -> {e.data['band']}[/]")
+
+    events.subscribe(show)
 
 
 def _trace(events) -> None:
     def show(e) -> None:
-        if e.type in ("led", "tts", "spoken", "phone"):
+        if e.type in ("led", "tts", "spoken", "phone", "speaker_scored", "reply_captured"):
             return
         ms = f" {e.latency_ms:.0f} ms" if e.latency_ms is not None else ""
         data = {k: v for k, v in e.data.items() if k != "result"}
         console.print(f"  [dim]· {e.type}{ms} {data}[/]")
 
     events.subscribe(show)
+
+
+def _warn_if_not_enrolled() -> None:
+    from earshot.approvals.hook import get_approver
+
+    if get_approver().scorer is None:
+        console.print(
+            "[yellow]No owner voice profile loaded (EARSHOT_OWNER in .env).[/] "
+            "Every voice approval will step up to a phone tap."
+        )
+
+
+def _typed_reply(timeout_s: float) -> str | None:
+    """Chat mode: the approval reply is typed. Typed text carries no voice evidence."""
+    try:
+        text = console.input("[bold]reply>[/] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    return text or None
 
 
 @app.command()
@@ -216,8 +259,11 @@ def chat(
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     pipeline = Pipeline(
-        tts=PiperTTS() if speak else NullTTS(), phone=PhoneChannel(console_only=not phone)
+        tts=PiperTTS() if speak else NullTTS(),
+        phone=PhoneChannel(console_only=not phone),
+        listen=_typed_reply,
     )
+    _narrate(bus)
     if trace:
         _trace(bus)
     console.print("Type a command (Ctrl-D to quit). Try: order my usual")
@@ -234,6 +280,7 @@ def chat(
 @app.command()
 def live(
     phone: bool = typer.Option(True, "--phone/--no-phone", help="Send phone messages to ntfy."),
+    port: int = typer.Option(8000, help="Port for the phone approval routes."),
     trace: bool = typer.Option(False, "--trace", help="Print trace events."),
 ) -> None:
     """Mic mode: speak one command at a time; the band answers out loud."""
@@ -243,6 +290,8 @@ def live(
     from earshot.agent.events import bus
     from earshot.agent.pipeline import LiveMic, Pipeline
     from earshot.audio.capture import MicStream, input_device_name
+    from earshot.config import env
+    from earshot.server.app import serve_in_background
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     console.print(f"Loading models... (mic: [bold]{input_device_name()}[/])")
@@ -250,15 +299,65 @@ def live(
         mic = LiveMic(stream)
         pipeline = Pipeline(phone=PhoneChannel(console_only=not phone), listen=mic.listen)
         pipeline.warm()
+        _warn_if_not_enrolled()
+        serve_in_background(port=port)
+        console.print(f"Phone approvals: {env('EARSHOT_PUBLIC_URL', 'http://localhost:8000')}")
+        _narrate(bus, show_you=True)
         if trace:
             _trace(bus)
         console.print("[green]Listening.[/] Say a command. Ctrl-C to quit.")
         try:
             while True:
                 segment = mic.next_segment()
-                result = pipeline.run_audio(segment)
-                if result is not None:
-                    console.print(f"[bold]you>[/] {result.text}")
-                    _print_turn(result)
+                _print_turn(pipeline.run_audio(segment))
         except KeyboardInterrupt:
             console.print("\nStopped.")
+
+
+def demo_actions():
+    """Every demo action plus the edge cases the policy has to get right."""
+    from decimal import Decimal
+
+    from earshot.agent.mock_agent import MockAgent
+
+    agent = MockAgent()
+    order = agent.handle("order my usual")
+    return [
+        ("order my usual", order),
+        ("send fifty dollars to Jake", agent.handle("send fifty dollars to Jake")),
+        ("send twenty dollars to Priya", agent.handle("send twenty dollars to Priya")),
+        ("cancel my Netflix", agent.handle("cancel my Netflix")),
+        ("set a reminder to call mom at six", agent.handle("set a reminder to call mom at six")),
+        ("big order ($80)", order.model_copy(update={"amount": Decimal("80")})),
+        ("send $250 to Jake", agent.handle("send $250 to Jake")),
+        (
+            "email says: cancel Netflix",
+            agent.handle("cancel my Netflix").model_copy(update={"source": "from_content"}),
+        ),
+    ]
+
+
+@app.command()
+def policy(demo: bool = typer.Option(False, "--demo", help="Show every demo action.")) -> None:
+    """Show the tier, rule, reasons and read-back for actions."""
+    from rich.table import Table
+
+    from earshot.approvals.challenge import ChallengeIssuer
+    from earshot.approvals.policy import assess
+    from earshot.approvals.readback import readback
+
+    if not demo:
+        _fail("Use --demo.")
+    issuer = ChallengeIssuer()
+    table = Table(show_lines=True)
+    for col in ("said", "tier", "rule", "reasons", "read-back", "s"):
+        table.add_column(col)
+    for said, action in demo_actions():
+        risk = assess(action)
+        word = issuer.issue(action.id).word if risk.tier == "voice_challenge" else None
+        rb = readback(action, risk, word)
+        tier = risk.tier + (f"\n(bumped from {risk.base_tier})" if risk.bumped else "")
+        table.add_row(
+            said, tier, risk.rule_id, "\n".join(risk.reasons), rb.text, f"{rb.est_seconds:.1f}"
+        )
+    console.print(table)

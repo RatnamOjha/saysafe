@@ -44,14 +44,17 @@ def _encoder():
         logging.disable(logging.NOTSET)
 
 
-def embed(audio: np.ndarray) -> Embedding:
-    """VAD first, then embed only the speech. Raises TooShort under min_speech_s."""
+def embed(audio: np.ndarray, min_speech_s: float | None = None) -> Embedding:
+    """VAD first, then embed only the speech. Raises TooShort under min_speech_s
+    (default: enroll.min_speech_s from config/audio.yaml)."""
     import torch
 
     start = time.perf_counter()
     speech = vad.speech_only(audio)
     speech_seconds = len(speech) / SR
-    minimum = load_yaml("audio")["enroll"]["min_speech_s"]
+    minimum = (
+        min_speech_s if min_speech_s is not None else load_yaml("audio")["enroll"]["min_speech_s"]
+    )
     if speech_seconds < minimum:
         raise TooShort(speech_seconds, minimum)
     with torch.inference_mode():

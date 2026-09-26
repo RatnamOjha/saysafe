@@ -60,3 +60,14 @@ def test_vad_finds_piper_speech(piper_speech):
         [np.zeros(16000, np.float32), piper_speech, np.zeros(16000, np.float32)]
     )
     assert len(StreamingVAD().feed(padded)) >= 1
+
+
+def test_reply_vad_waits_through_a_pause():
+    # 10 speech, 18 silence (~576 ms), 10 speech: one segment at 800 ms, two at 400 ms
+    pattern = [1] * 10 + [0] * 18 + [1] * 10 + [0] * 30
+    probs = iter(pattern)
+    long = StreamingVAD(prob_fn=lambda f: float(next(probs)), min_silence_ms=800)
+    assert len(long.feed(np.zeros(FRAME * len(pattern), np.float32))) == 1
+    probs2 = iter(pattern)
+    short = StreamingVAD(prob_fn=lambda f: float(next(probs2)))
+    assert len(short.feed(np.zeros(FRAME * len(pattern), np.float32))) == 2

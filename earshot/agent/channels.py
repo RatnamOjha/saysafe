@@ -96,7 +96,7 @@ class PhoneChannel:
             except httpx.HTTPError as e:
                 log.warning("phone: ntfy failed (%s), printing instead", type(e).__name__)
         if via == "console":
-            print(f"[phone] {payload.get('title')}: {text}")
+            log.info("[phone] %s: %s", payload.get("title"), text)
         d = Delivery(self.name, text, extra={"via": via, **extra})
         self.sent.append(d)
         self.events.publish("phone", text=text, via=via, title=payload.get("title"), **extra)

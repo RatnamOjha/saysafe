@@ -89,6 +89,13 @@ def _patterns() -> dict[str, re.Pattern]:
         ),
         "card_number": re.compile(r"(?<!\d)(?P<v>\d(?:[ -]?\d){12,18})(?!\d)"),
         "ssn": re.compile(r"(?<!\d)(?P<v>\d{3}-\d{2}-\d{4})(?!\d)"),
+        # a long number right after "card" is a card number even if it fails Luhn (test cards)
+        "card_context": re.compile(r"\bcard\b[^\n]{0,60}?(?P<v>\d(?:[ -]?\d){12,18})(?!\d)", re.I),
+        # a dose or a lab value is health data whatever the drug or test is called
+        "health_units": re.compile(
+            r"(?P<v>\b\d+(?:\.\d+)?\s?(?:mg/dL|mmol/L|ng/mL|pg/mL|U/L|IU/L|mEq/L|mcg|mg|µg|mL|IU|"
+            r"units|bpm|beats per minute|mmHg)(?![A-Za-z]))"
+        ),
         "account_number": re.compile(
             r"\baccount\s+(?:number|no\.?|#)\s*(?:is\s+)?:?\s*(?P<v>\d[\d\s-]{5,20}\d)", re.I
         ),
@@ -96,7 +103,7 @@ def _patterns() -> dict[str, re.Pattern]:
         "money_after_kw": re.compile(rf"\b(?:{money_kw})\b[^.$\d\n]{{0,40}}?(?P<v>{amount})", re.I),
         "money_before_kw": re.compile(rf"(?P<v>{amount})[^.\n]{{0,30}}?\b(?:{money_kw})\b", re.I),
         "street_address": re.compile(
-            rf"(?P<v>\b\d{{1,6}}\s+(?:[A-Z][a-z]+\s+){{1,3}}{street_suffix}\b"
+            rf"(?P<v>\b\d{{1,6}}[A-Za-z]?\s+(?:[A-Z][a-z]+\s+){{1,3}}{street_suffix}\b"
             rf"(?:,?\s+(?:Apt|Apartment|Unit|Suite|#)\.?\s*\w+)?)"
         ),
         "health": re.compile(
@@ -110,6 +117,7 @@ def _patterns() -> dict[str, re.Pattern]:
 _RULE_OF = {
     "otp_code_after": "otp_code", "otp_code_before": "otp_code", "password": "password",
     "card_number": "card_number", "ssn": "ssn", "account_number": "account_number",
+    "card_context": "card_number", "health_units": "health",
     "money_after_kw": "money_personal", "money_before_kw": "money_personal",
     "street_address": "street_address", "health": "health", "legal": "legal",
     "email_sender": "email_sender",
@@ -150,7 +158,7 @@ def regex_spans(text: str, source_tags: set[str] | frozenset[str] = frozenset())
             if rule == "otp_code" and _not_a_secret_code(text, m.start("kw")):
                 continue
             group = "v" if m.group("v") is not None else "dr"
-            if rule == "card_number" and not luhn_ok(m.group(group)):
+            if name == "card_number" and not luhn_ok(m.group(group)):  # bare numbers only
                 continue
             start, end = m.span(group)
             spans.append(
@@ -229,6 +237,9 @@ def detect(text: str, source_tags: set[str] | frozenset[str] = frozenset()) -> D
 
     t0 = time.perf_counter()
     spans = regex_spans(text, source_tags)
+    if any(s.category == "money_personal" for s in spans):
+        # one amount is about the user's money, so the others in the same reply are too
+        spans = regex_spans(text, set(source_tags) | {"bank"})
     latency["regex"] = _ms(t0)
     level: Level = "public"
     for s in spans:

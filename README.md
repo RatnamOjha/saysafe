@@ -10,3 +10,9 @@ A screen quietly does two jobs: it shows who approved something, and it keeps wh
 **Status:** work in progress. Code, tests, an eval anyone can rerun, and a demo are coming.
 
 Independent project by Ratnam Ojha. Not affiliated with Persona.
+
+## Results
+
+<!-- results:start -->
+Not measured yet. Run `make eval`.
+<!-- results:end -->

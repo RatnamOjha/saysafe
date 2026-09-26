@@ -39,6 +39,13 @@
 - {text: "Email from Chase: Statement ready.", tags: [email], level: personal, spans: ["Chase"]}
 - {text: "Lunch with Sam at noon.", tags: [calendar], level: personal}
 - {text: "You have a new email.", tags: [email], level: personal}
+- {text: "Remember to take 20 mg of your blood pressure pill tonight.", level: sensitive, spans: ["20 mg"]}
+- {text: "Your fasting glucose was 104 mg/dL.", level: sensitive, spans: ["104 mg/dL"]}
+- {text: "Your card number is 5500 0000 0000 0005.", level: secret, spans: ["5500 0000 0000 0005"]}
+- {text: "The card ending in 9921 is 4000 1234 5678 9921.", level: secret}
+- {text: "The courier is heading to 14A Elm Street.", level: sensitive, spans: ["14A Elm Street"]}
+- {text: "Your court appearance is Monday at 10.", level: sensitive}
+- {text: "Checking has $1,240 and savings has $8,300.", level: sensitive, spans: ["$1,240", "$8,300"]}
 # must stay public
 - {text: "Room 404", level: public}
 - {text: "Your flight UA 1234 boards at gate 12.", level: public}
@@ -58,3 +65,6 @@
 - {text: "A latte costs about $5 there.", level: public}
 - {text: "The meeting code of conduct is on the wiki.", level: public}
 - {text: "Bitcoin is at $64,000 today.", level: public}
+- {text: "Your phone battery is at 40 percent.", level: public}
+- {text: "The Warriors won 112 to 104 last night.", level: public}
+- {text: "A 12 ounce latte is about 150 calories.", level: public}

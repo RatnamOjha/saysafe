@@ -11,7 +11,7 @@ rules:
   account_number: secret    # "account number 12345678"
   money_personal: sensitive # an amount near balance / owe / due / salary / bill ...
   street_address: sensitive # 2150 Mission Street
-  health: sensitive         # conditions, meds, results, specialists, "Dr. X"
+  health: sensitive         # conditions, meds, results, specialists, "Dr. X", doses and lab units
   legal: sensitive          # lawyers, court, custody ...
   email_sender: personal    # "Email from X"
 
@@ -19,7 +19,8 @@ code_words: [code, otp, verification, verify, passcode, pin, one-time, security 
 not_code_words: [zip, postal, area, country, error, status, room, dress, source, promo]
 
 money_words: [balance, owe, owes, owed, due, salary, paycheck, bill, bills, debt, rent,
-              overdraft, credit limit, statement, spent, spending, income, loan, mortgage]
+              overdraft, credit limit, statement, spent, spending, income, loan, mortgage,
+              deposit, deposited, savings, checking, net worth, tax refund, invoice]
 
 health_words: [dermatologist, oncologist, psychiatrist, psychologist, therapist, therapy,
                cardiologist, gynecologist, urologist, neurologist, endocrinologist,
@@ -28,10 +29,17 @@ health_words: [dermatologist, oncologist, psychiatrist, psychologist, therapist,
                cholesterol, diabetes, insulin, blood pressure, depression, anxiety,
                adhd, pregnancy, pregnant, std, hiv, chemo, rash, eczema, acne,
                antidepressant, sertraline, lexapro, adderall, metformin, ozempic,
-               dermatology, oncology, psychiatry]
+               dermatology, oncology, psychiatry,
+               blood work, bloodwork, lab result, lab results, labs, triglycerides, ldl, hdl,
+               a1c, hba1c, vitamin d, thyroid, nodule, tumor, cancer, pathology, ekg, ecg,
+               sclerosis, hypertension, asthma, arthritis, migraine, infection, chemotherapy,
+               inhaler, dose, diagnosis of, stage 1, stage 2, stage 3, stage 4, symptoms,
+               treatment for, undergoing treatment, surgery, physical therapy,
+               blood sugar, glucose]
 
-legal_words: [lawyer, attorney, lawsuit, court date, custody, divorce, subpoena, arrest,
-              arrested, probation, bail, eviction, restraining order, settlement, dui]
+legal_words: [lawyer, attorney, lawsuit, court, court date, custody, divorce, subpoena,
+              arrest, arrested, probation, bail, eviction, restraining order, settlement, dui,
+              case number, docket, hearing]
 
 # Layer b: source hints from the agent set a minimum level.
 source_min_level:

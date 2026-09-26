@@ -101,6 +101,7 @@ def test_whisper_is_discreet_and_quiet():
          "Your Chase checking balance is on your phone."),
         ("Your lawyer called about the custody hearing.", FALLBACK),
         ("Time to take your sertraline.", FALLBACK),
+        ("Take 40 mg of the new medication at noon.", FALLBACK),
     ],
 )  # fmt: skip
 def test_rewrites(text, spoken):

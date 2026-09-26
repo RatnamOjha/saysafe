@@ -35,7 +35,7 @@ _PLACEHOLDER = {
     "health": "",
 }
 # After deleting "dermatologist" from "your dermatologist appointment", these nouns
-# still read fine; anything else after "your"/"the" means the sentence broke.
+# still read fine; anything else means the sentence broke.
 _NOUNS_AFTER_DELETE = {
     "appointment", "appointments", "results", "result", "visit", "test", "prescription",
     "refill", "hearing", "case", "meeting", "call", "checkup", "check", "consultation",
@@ -74,10 +74,10 @@ def span_rewrite(text: str, spans: list[Span]) -> str:
         if not repl:
             after = after.lstrip()
             next_word = re.match(r"[a-z]+", after.lower())
-            if re.search(r"\b(?:your|the|a|an|my|his|her|their)\s+$", before, re.I) and (
-                not next_word or next_word.group(0) not in _NOUNS_AFTER_DELETE
-            ):
-                return _UNFIXABLE  # "your lawyer called" -> "your called": give up
+            if not next_word or next_word.group(0) not in _NOUNS_AFTER_DELETE:
+                # Deleting a word only reads cleanly before a safe noun ("your [dermatologist]
+                # appointment"). Anything else ("your lawyer called", "take 40 mg") gives up.
+                return _UNFIXABLE
         out = before + repl + after
     return _tidy(out)
 

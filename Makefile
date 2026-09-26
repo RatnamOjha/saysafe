@@ -28,7 +28,8 @@ preflight:
 	uv run earshot preflight
 
 eval:
-	@echo "eval: not built yet (E3)"
+	uv run python eval/run_all.py
+	uv run python scripts/update_readme_numbers.py
 
 video:
 	@echo "video: not built yet (G1)"

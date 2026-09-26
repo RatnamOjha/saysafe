@@ -1,17 +1,19 @@
 """Shared paths and helpers for the eval scripts. Recorded data never leaves eval/data/."""
 
 import csv
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-DATA = ROOT / "eval" / "data"
+# Overridable so the eval scripts can be smoke-tested on synthetic data.
+DATA = Path(os.environ.get("EARSHOT_EVAL_DATA", ROOT / "eval" / "data"))
 VOICES = DATA / "voices"
 LIBRISPEECH = DATA / "librispeech"
 NOISE = DATA / "noise"
-REPORTS = ROOT / "eval" / "reports"
+REPORTS = Path(os.environ.get("EARSHOT_EVAL_REPORTS", ROOT / "eval" / "reports"))
 LATEST = REPORTS / "latest"
 MANIFEST = VOICES / "manifest.csv"
 FIELDS = ["pid", "imitator", "condition", "n", "text", "kind", "duration_s", "speech_s",

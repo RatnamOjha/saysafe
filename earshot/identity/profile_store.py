@@ -49,11 +49,17 @@ def resolve_key() -> bytes:
     if key:
         return key.encode()
     import keyring
+    from keyring.errors import KeyringError
 
-    key = keyring.get_password(_KEYRING_SERVICE, _KEYRING_USER)
-    if not key:
-        key = Fernet.generate_key().decode()
-        keyring.set_password(_KEYRING_SERVICE, _KEYRING_USER, key)
+    try:
+        key = keyring.get_password(_KEYRING_SERVICE, _KEYRING_USER)
+        if not key:
+            key = Fernet.generate_key().decode()
+            keyring.set_password(_KEYRING_SERVICE, _KEYRING_USER, key)
+    except KeyringError as e:  # e.g. a Linux server with no keychain
+        raise ProfileError(
+            f"No OS keychain available ({type(e).__name__}). Set EARSHOT_PROFILE_KEY instead."
+        ) from None
     return key.encode()
 
 

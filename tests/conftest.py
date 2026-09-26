@@ -35,6 +35,11 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("EARSHOT_PROFILES_DIR", str(tmp_path / "profiles"))
     monkeypatch.setenv("EARSHOT_OWNER", "nobody")
     monkeypatch.setenv("EARSHOT_SECRET", "test-secret")
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv(
+        "EARSHOT_PROFILE_KEY", Fernet.generate_key().decode()
+    )  # never the real keychain
     monkeypatch.delenv("NTFY_TOPIC", raising=False)
     tokens.default_service.cache_clear()
     monkeypatch.setattr(hook, "_approver", None)

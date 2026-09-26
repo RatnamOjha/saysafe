@@ -147,3 +147,17 @@ def test_short_reply_embeds_with_lower_minimum():
     with pytest.raises(TooShort):
         embed(word)
     assert embed(word, min_speech_s=0.35).vector.shape == (192,)
+
+
+def test_missing_keychain_is_a_clear_profile_error(tmp_path, monkeypatch):
+    import keyring
+    from keyring.backends.fail import Keyring as NoKeyring
+
+    from earshot.identity.owner import load_owner_scorer
+
+    monkeypatch.delenv("EARSHOT_PROFILE_KEY", raising=False)
+    monkeypatch.setattr(keyring, "get_keyring", lambda: NoKeyring())
+    monkeypatch.setattr(keyring.core, "_keyring_backend", NoKeyring())
+    with pytest.raises(ProfileError, match="EARSHOT_PROFILE_KEY"):
+        ProfileStore(tmp_path)
+    assert load_owner_scorer() is None  # fails closed: no owner, so voice approvals step up

@@ -1,0 +1,45 @@
+# Python / tooling
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+build/
+dist/
+
+# Secrets: API keys, EARSHOT_SECRET, profile key. Only the template is committed.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# Voiceprints, audit log, token DB (encrypted or not, never committed)
+/profiles/
+/data/
+*.sqlite
+*.db
+
+# Recorded audio and eval data (friends' voices stay on this laptop)
+eval/data/
+*.wav
+*.flac
+*.mp3
+*.m4a
+
+# Video
+media/
+*.mp4
+*.webm
+brag-output*/
+
+# Private planning notes (outreach drafts)
+EARSHOT_48H_PLAYBOOK.md
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

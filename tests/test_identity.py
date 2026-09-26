@@ -121,7 +121,7 @@ def test_run_enrollment_rerecords_short_and_outlier_clips():
     assert len(p.embeddings) == len(enroll.PROMPTS)
     assert calls["n"] == len(enroll.PROMPTS) + 2  # one retry for short, one for outlier
     assert cosine(p.mean, base) > 0.9
-    assert any("Too short" in s for s in shown) and any("Re-recording" in s for s in shown)
+    assert any("enough speech" in s for s in shown) and any("Re-recording" in s for s in shown)
 
 
 # real model

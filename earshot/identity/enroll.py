@@ -14,11 +14,13 @@ from earshot.config import load_yaml
 from earshot.identity.embed import Embedding, TooShort, cosine, embed, normalize
 from earshot.identity.profile_store import Profile
 
+# Short approval words are said three times: one "yes" is under the 0.8 s of speech
+# an embedding needs, and these are exactly the words the band must recognize.
 PROMPTS = [
-    "yes",
-    "yeah, do it",
-    "confirm",
-    "go ahead",
+    "yes ... yes ... yes",
+    "yeah, do it ... yeah, do it",
+    "confirm ... confirm ... confirm",
+    "go ahead ... go ahead",
     "Order my usual from DoorDash.",
     "Send fifty dollars to Jake for dinner.",
     "What's on my calendar tomorrow morning?",
@@ -60,21 +62,36 @@ def run_enrollment(
     mic_name: str,
     show: Callable[[str], None] = print,
     embedder: Callable[[np.ndarray], Embedding] = embed,
+    ready: Callable[[str], None] = lambda prompt: None,
 ) -> Profile:
-    """Record every prompt, re-record too-short clips and outliers, return the profile."""
+    """Record every prompt, re-record too-short clips and outliers, return the profile.
+
+    `ready(prompt)` is called before each recording (the CLI waits for Enter there).
+    """
     cfg = load_yaml("audio")["enroll"]
 
     def capture(i: int) -> Clip:
         prompt = PROMPTS[i]
-        while True:
-            show(f"[{i + 1}/{len(PROMPTS)}] Say: {prompt}")
+        for attempt in range(1, 100):
+            ready(f'[{i + 1}/{len(PROMPTS)}] Out loud: "{prompt}"')
+            show(f"  🎙  Recording {cfg['clip_seconds']} s. Say it out loud now.")
             audio = record(cfg["clip_seconds"])
             try:
                 e = embedder(audio)
             except TooShort as short:
-                show(f"  Too short ({short.speech_seconds:.1f} s of speech). Again, a bit slower.")
+                level = rms_dbfs(audio)
+                show(
+                    f"  Didn't catch enough speech ({short.speech_seconds:.1f} s, "
+                    f"mic level {level:.0f} dBFS). Let's try again."
+                )
+                if attempt % 3 == 0:
+                    show(
+                        "  Hint: speak out loud, don't type. If the level stays under -45 dBFS, "
+                        "move closer or check System Settings > Sound > Input."
+                    )
                 continue
             return Clip(prompt, e, rms_dbfs(vad.speech_only(audio)))
+        raise RuntimeError("unreachable")
 
     clips = [capture(i) for i in range(len(PROMPTS))]
     for round_ in range(cfg["max_rerecord_rounds"]):

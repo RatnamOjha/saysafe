@@ -94,8 +94,13 @@ def enroll(name: str = typer.Option(..., "--name")) -> None:
     mic = capture.input_device_name()
     console.print(f"Enrolling [bold]{name}[/] with mic [bold]{mic}[/].")
     console.print("Use the room and mic you'll demo with. Speak normally. Each clip is 3 s.\n")
-    typer.prompt("Press Enter to start", default="", show_default=False)
-    profile = run_enrollment(name, capture.record, mic, show=console.print)
+    console.print("For each clip: read the line, press Enter, then say it [bold]out loud[/].\n")
+
+    def ready(prompt: str) -> None:
+        console.print(f"[bold cyan]{prompt}[/]")
+        typer.prompt("  Press Enter when ready", default="", show_default=False)
+
+    profile = run_enrollment(name, capture.record, mic, show=console.print, ready=ready)
     path = store.save(profile)
     console.print(f"\n[green]Saved encrypted profile[/] {path}")
     console.print(f"Median speech level: {profile.median_rms_dbfs:.1f} dBFS")
@@ -129,7 +134,8 @@ def verify(
     clips = file or [None] * count
     for i, path in enumerate(clips, 1):
         if path is None:
-            typer.prompt(f"[{i}/{count}] Press Enter, then say something (3 s)", default="")
+            typer.prompt(f"[{i}/{count}] Press Enter, then speak out loud (3 s)", default="")
+            console.print("  🎙  Recording...")
             audio = capture.record(3.0)
         else:
             audio = io.load_audio(path)

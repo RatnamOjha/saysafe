@@ -58,3 +58,14 @@ source_bump:
 challenge:
   ttl_s: 30          # a challenge word expires this long after it's issued
   avoid_recent: 50   # never reissue one of the last N words
+
+voice:
+  reply_weight: 0.6      # fused = 0.6 x reply score + 0.4 x command score
+  command_weight: 0.4    # the reply alone is used if the command was too short
+  reply_timeout_s: 8     # no reply in this long -> reject
+
+tokens:
+  ttl_s: 60              # an approval token must be used within this long
+
+phone:
+  pending_ttl_s: 120     # a phone approval request expires after this long

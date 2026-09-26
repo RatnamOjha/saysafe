@@ -173,31 +173,63 @@ def verify(
 
 
 def _print_turn(result) -> None:
-    if result is None:
+    if result is None or result.action is None:
         return
-    if result.action is not None:
-        a = result.action
-        amount = f" ${a.amount}" if a.amount is not None else ""
-        console.print(f"  [cyan]action[/] {a.type} {a.counterparty or ''}{amount}".rstrip())
-        if result.decision is not None:
-            console.print(f"  [cyan]approval[/] {result.decision.outcome}")
-    if result.speak is not None:
-        s = result.speak
-        if s.spoken_text:
-            console.print(f"  [green]band says[/] {s.spoken_text}  [dim]({s.channel})[/]")
-        if s.phone_text:
-            console.print(f"  [magenta]phone[/] {s.phone_text}")
+    a = result.action
+    amount = f" ${a.amount}" if a.amount is not None else ""
+    console.print(f"  [dim]action {a.type} {a.counterparty or ''}{amount}[/]".rstrip())
+    if result.decision is not None:
+        d = result.decision
+        color = {"approve": "green", "step_up": "yellow", "reject": "red"}[d.outcome]
+        why = f"  ({'; '.join(d.reasons)})" if d.reasons else ""
+        console.print(f"  [{color}]{d.outcome}[/]{why}")
+
+
+def _narrate(events) -> None:
+    """Print what the band says and what reaches the phone, as it happens."""
+
+    def show(e) -> None:
+        if e.type == "spoken":
+            where = "" if e.data["channel"] == "speaker" else f" [dim]({e.data['channel']})[/]"
+            console.print(f"  [green]band:[/] {e.data['text']}{where}")
+        elif e.type == "phone":
+            console.print(f"  [magenta]phone ({e.data['via']}):[/] {e.data['text']}")
+        elif e.type == "speaker_scored":
+            fused = e.data["fused"]
+            score = "no voice" if fused is None else f"{fused:.2f}"
+            console.print(f"  [dim]voice {score} -> {e.data['band']}[/]")
+
+    events.subscribe(show)
 
 
 def _trace(events) -> None:
     def show(e) -> None:
-        if e.type in ("led", "tts", "spoken", "phone"):
+        if e.type in ("led", "tts", "spoken", "phone", "speaker_scored"):
             return
         ms = f" {e.latency_ms:.0f} ms" if e.latency_ms is not None else ""
         data = {k: v for k, v in e.data.items() if k != "result"}
         console.print(f"  [dim]· {e.type}{ms} {data}[/]")
 
     events.subscribe(show)
+
+
+def _warn_if_not_enrolled() -> None:
+    from earshot.approvals.hook import get_approver
+
+    if get_approver().scorer is None:
+        console.print(
+            "[yellow]No owner voice profile loaded (EARSHOT_OWNER in .env).[/] "
+            "Every voice approval will step up to a phone tap."
+        )
+
+
+def _typed_reply(timeout_s: float) -> str | None:
+    """Chat mode: the approval reply is typed. Typed text carries no voice evidence."""
+    try:
+        text = console.input("[bold]reply>[/] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    return text or None
 
 
 @app.command()
@@ -216,8 +248,11 @@ def chat(
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     pipeline = Pipeline(
-        tts=PiperTTS() if speak else NullTTS(), phone=PhoneChannel(console_only=not phone)
+        tts=PiperTTS() if speak else NullTTS(),
+        phone=PhoneChannel(console_only=not phone),
+        listen=_typed_reply,
     )
+    _narrate(bus)
     if trace:
         _trace(bus)
     console.print("Type a command (Ctrl-D to quit). Try: order my usual")
@@ -234,6 +269,7 @@ def chat(
 @app.command()
 def live(
     phone: bool = typer.Option(True, "--phone/--no-phone", help="Send phone messages to ntfy."),
+    port: int = typer.Option(8000, help="Port for the phone approval routes."),
     trace: bool = typer.Option(False, "--trace", help="Print trace events."),
 ) -> None:
     """Mic mode: speak one command at a time; the band answers out loud."""
@@ -243,6 +279,8 @@ def live(
     from earshot.agent.events import bus
     from earshot.agent.pipeline import LiveMic, Pipeline
     from earshot.audio.capture import MicStream, input_device_name
+    from earshot.config import env
+    from earshot.server.app import serve_in_background
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     console.print(f"Loading models... (mic: [bold]{input_device_name()}[/])")
@@ -250,6 +288,10 @@ def live(
         mic = LiveMic(stream)
         pipeline = Pipeline(phone=PhoneChannel(console_only=not phone), listen=mic.listen)
         pipeline.warm()
+        _warn_if_not_enrolled()
+        serve_in_background(port=port)
+        console.print(f"Phone approvals: {env('EARSHOT_PUBLIC_URL', 'http://localhost:8000')}")
+        _narrate(bus)
         if trace:
             _trace(bus)
         console.print("[green]Listening.[/] Say a command. Ctrl-C to quit.")

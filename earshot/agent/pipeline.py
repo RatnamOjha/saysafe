@@ -30,7 +30,8 @@ from earshot.privacy.hook import SpeakDecision
 
 log = logging.getLogger(__name__)
 
-Listen = Callable[[float], np.ndarray | None]
+# Next reply from the user: audio from the mic, typed text in chat mode, or None on timeout.
+Listen = Callable[[float], np.ndarray | str | None]
 
 
 @dataclass
@@ -43,6 +44,7 @@ class TurnContext:
     phone: PhoneChannel
     events: EventBus
     flags: dict[str, bool]
+    complete_approved: Callable[[Action, str], None] = lambda action, token: None
     command_embedding: Embedding | None = None  # None: text mode, or too little speech
     command_speech_seconds: float = 0.0
     turn_id: str = field(default_factory=lambda: uuid4().hex[:8])
@@ -141,6 +143,7 @@ class Pipeline:
             phone=self.phone,
             events=self.events,
             flags=self.flags,
+            complete_approved=self.complete_approved,
         )
 
     def _run(self, ctx: TurnContext) -> TurnResult:
@@ -163,8 +166,16 @@ class Pipeline:
 
         if result.reply is not None:
             result.speak = self._deliver(result.reply, ctx)
-        self.events.led("done")
+        if result.decision is None or result.decision.outcome == "approve":
+            self.events.led("done")  # step-up stays amber, a rejection stays off
         return result
+
+    def complete_approved(self, action: Action, token: str) -> Reply:
+        """Run an action approved later (a phone tap) and announce the result."""
+        reply = self._execute(action, token)
+        self._deliver(reply, self._context(""))
+        self.events.led("done")
+        return reply
 
     def _approve(self, action: Action, ctx: TurnContext) -> ApprovalDecision:
         try:

@@ -24,9 +24,17 @@ def events():
     return bus
 
 
+def _approve_all(action, ctx):
+    from earshot.approvals.tokens import default_service
+
+    return ApprovalDecision("approve", default_service().issue(action, "test", "test", None))
+
+
 @pytest.fixture
 def pipeline(events, monkeypatch):
+    """Pipeline mechanics with an approve-everything hook; the real hook is tested elsewhere."""
     monkeypatch.delenv("EARSHOT_AGENT", raising=False)
+    monkeypatch.setattr(approvals_hook, "before_execute", _approve_all)
     return Pipeline(
         tts=NullTTS(), agent=MockAgent(fixed_code="482913"), events=events,
         phone=PhoneChannel(events, console_only=True),
@@ -51,7 +59,10 @@ def test_executor_requires_token():
     a = MockAgent().order_usual()
     with pytest.raises(MissingApproval):
         Executor().run(a, None)
-    assert "Order placed" in Executor().run(a, "tok").text
+    from earshot.approvals.tokens import default_service
+
+    token = default_service().issue(a, "voice", "voice", 0.9)
+    assert "Order placed" in Executor().run(a, token).text
 
 
 def test_executor_uses_verifier():
@@ -84,7 +95,7 @@ def test_phone_posts_ntfy_json_with_approval_buttons(events, monkeypatch):
     assert all(a["method"] == "POST" for a in body["actions"])
 
 
-def test_phone_falls_back_to_console(events, monkeypatch, capsys):
+def test_phone_falls_back_to_console(events, monkeypatch):
     monkeypatch.setenv("NTFY_TOPIC", "earshot-test")
 
     def down(request):
@@ -92,7 +103,7 @@ def test_phone_falls_back_to_console(events, monkeypatch, capsys):
 
     phone = PhoneChannel(events, client=httpx.Client(transport=httpx.MockTransport(down)))
     assert phone.notify("hello").extra["via"] == "console"
-    assert "hello" in capsys.readouterr().out
+    assert events.log[-1].type == "phone" and events.log[-1].data["text"] == "hello"
 
 
 def test_speaker_records_what_it_said(events):
@@ -193,7 +204,7 @@ def test_run_audio_keeps_command_embedding(pipeline, monkeypatch):
     seen = {}
     monkeypatch.setattr(
         approvals_hook, "before_execute",
-        lambda a, ctx: seen.setdefault("ctx", ctx) and ApprovalDecision("approve", "t"),
+        lambda a, ctx: seen.setdefault("ctx", ctx) and _approve_all(a, ctx),
     )  # fmt: skip
     pipeline.run_audio(np.zeros(16000, dtype=np.float32))
     assert seen["ctx"].command_embedding.vector is vec

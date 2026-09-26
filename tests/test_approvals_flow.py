@@ -21,6 +21,7 @@ from earshot.audio.stt import Transcript
 from earshot.audio.tts import NullTTS
 from earshot.identity.embed import Embedding
 from earshot.identity.verify import Thresholds, VerifyResult, band
+from earshot.privacy.audience import FixedAudience
 from earshot.server.app import create_app
 
 T = Thresholds(0.45, 0.25, "test")
@@ -80,6 +81,7 @@ def world(tmp_path):
         phone=PhoneChannel(events, console_only=True),
         executor=Executor(verify_token=tokens.verify),
         listen=lambda timeout: replies.pop(0) if replies else None,
+        audience=FixedAudience("alone_likely"),  # these tests are about approvals, not privacy
     )  # fmt: skip
     pipeline.approver = approver
     pipeline.set_command_score = lambda s: setattr(pipeline, "_cmd", s)

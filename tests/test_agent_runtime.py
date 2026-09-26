@@ -141,7 +141,10 @@ def test_order_usual_says_order_placed(pipeline, events):
     assert result.action.type == "order_food"
 
 
-def test_code_is_spoken_with_stub_hook(pipeline):
+def test_code_is_spoken_when_alone(pipeline):
+    from earshot.privacy.audience import FixedAudience
+
+    pipeline.audience = FixedAudience("alone_likely")
     pipeline.run_text("what's my verification code")
     assert pipeline.tts.spoken == ["Your Chase verification code is 482913."]
 

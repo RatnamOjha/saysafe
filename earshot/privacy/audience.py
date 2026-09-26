@@ -153,6 +153,27 @@ class AudienceTracker:
         )
 
 
+class FixedAudience:
+    """A pretend room for text mode and tests: always reports one level."""
+
+    def __init__(self, level: AudienceLevel):
+        self.level = level
+        self.headphones = False
+        self.discreet_mode = False
+
+    def state(self) -> AudienceState:
+        evidence = {
+            "alone_likely": ["Simulated: alone"],
+            "unknown": ["Simulated: room unknown"],
+            "others_present": ["Simulated: another voice nearby"],
+        }[self.level]
+        return AudienceState(
+            self.level, 60.0, 5.0 if self.level == "others_present" else None,
+            int(self.level == "others_present"), int(self.level == "others_present"),
+            self.headphones, self.discreet_mode, list(evidence),
+        )  # fmt: skip
+
+
 def owner_score_fn() -> Callable[[np.ndarray], float | None] | None:
     """score(audio) against the enrolled owner, or None if nobody is enrolled."""
     from earshot.identity.owner import load_owner_scorer

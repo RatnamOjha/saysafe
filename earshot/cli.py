@@ -269,6 +269,11 @@ def chat(
     speak: bool = typer.Option(False, "--speak", help="Play replies through Piper."),
     phone: bool = typer.Option(False, "--phone", help="Send phone messages to ntfy."),
     trace: bool = typer.Option(False, "--trace", help="Print trace events."),
+    room: str = typer.Option(
+        "unknown", help="Pretend room: alone, unknown or others (text mode has no mic)."
+    ),
+    headphones: bool = typer.Option(False, "--headphones", help="Pretend headphones are in."),
+    discreet: bool = typer.Option(False, "--discreet", help="Turn on discreet mode."),
 ) -> None:
     """Text mode: type what you'd say to the band."""
     import os
@@ -277,13 +282,20 @@ def chat(
     from earshot.agent.events import bus
     from earshot.agent.pipeline import Pipeline
     from earshot.audio.tts import NullTTS, PiperTTS
+    from earshot.privacy.audience import FixedAudience
 
+    if room not in ("alone", "unknown", "others"):
+        _fail("--room must be alone, unknown or others")
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     pipeline = Pipeline(
         tts=PiperTTS() if speak else NullTTS(),
         phone=PhoneChannel(console_only=not phone),
         listen=_typed_reply,
+        audience=FixedAudience(
+            {"alone": "alone_likely", "unknown": "unknown", "others": "others_present"}[room]
+        ),
     )
+    pipeline.flags.update(headphones=headphones, discreet_mode=discreet)
     _narrate(bus)
     if trace:
         _trace(bus)

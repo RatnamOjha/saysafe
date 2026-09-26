@@ -1,3 +1,6 @@
+import sys
+import types
+
 import numpy as np
 import pytest
 
@@ -8,6 +11,19 @@ FIXTURE_TEXT = "Please order my usual from DoorDash and send it to my home addre
 def sine(freq: float = 440.0, seconds: float = 1.0, sr: int = SR, amp: float = 0.5) -> np.ndarray:
     t = np.arange(int(seconds * sr)) / sr
     return (amp * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+
+def _drop_unloadable_lazy_modules() -> None:
+    """speechbrain registers lazy stand-ins for optional packages (k2, ...) that raise
+    ImportError on any attribute access. Hypothesis reads __file__ from every loaded
+    module and crashes on them, so remove the ones that can't load."""
+    for name, module in list(sys.modules.items()):
+        if type(module) is types.ModuleType:
+            continue  # real modules are fine; only stand-in objects misbehave
+        try:
+            getattr(module, "__file__", None)
+        except ImportError:
+            del sys.modules[name]
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +38,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.delenv("NTFY_TOPIC", raising=False)
     tokens.default_service.cache_clear()
     monkeypatch.setattr(hook, "_approver", None)
+    _drop_unloadable_lazy_modules()
     yield
     tokens.default_service.cache_clear()
 

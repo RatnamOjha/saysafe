@@ -69,6 +69,8 @@ def _patterns() -> dict[str, re.Pattern]:
         rf"(?:\$\s?\d[\d,]*(?:\.\d{{1,2}})?|\d[\d,]*(?:\.\d{{1,2}})?\s*dollars"
         rf"|{number_words}dollars)"
     )
+    name = r"[A-Z](?:'[A-Z])?[a-zA-Z]+(?:-[A-Z][a-z]+)?"  # Mehta, O'Connor, Smith-Jones
+    not_yours = r"(?:local|favou?rite|nearest|nearby|neighborhood|closest)\b"
     street_suffix = (
         r"(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Way|Court|Ct|"
         r"Place|Pl|Terrace|Parkway|Pkwy|Circle|Cir)"
@@ -101,13 +103,22 @@ def _patterns() -> dict[str, re.Pattern]:
         ),
         "amount": re.compile(rf"(?P<v>{amount})", re.I),
         "money_after_kw": re.compile(rf"\b(?:{money_kw})\b[^.$\d\n]{{0,40}}?(?P<v>{amount})", re.I),
+        # an amount in the same sentence as "you"/"your" is about the user's money
+        # ("your local store", "your favorite cafe" describe a place, not the user's money)
+        "money_second_person": re.compile(
+            rf"(?:\b(?:you|your|you've|you're)\b(?!\s+{not_yours})[^.!?\n]*?(?P<v>{amount})"
+            rf"|(?P<v2>{amount})[^.!?\n]*?\b(?:you|your)\b(?!\s+{not_yours}))",
+            re.I,
+        ),
         "money_before_kw": re.compile(rf"(?P<v>{amount})[^.\n]{{0,30}}?\b(?:{money_kw})\b", re.I),
         "street_address": re.compile(
             rf"(?P<v>\b\d{{1,6}}[A-Za-z]?\s+(?:[A-Z][a-z]+\s+){{1,3}}{street_suffix}\b"
             rf"(?:,?\s+(?:Apt|Apartment|Unit|Suite|#)\.?\s*\w+)?)"
         ),
         "health": re.compile(
-            rf"\b(?P<v>{_alt(cfg['health_words'])})\b|(?P<dr>\bDr\.?\s+[A-Z][a-z]+)", re.I
+            rf"\b(?P<v>{_alt(cfg['health_words'])})\b"
+            rf"|(?-i:(?P<dr>\bDr\.?\s+{name}(?:\s+{name})?))",  # names are case-sensitive
+            re.I,
         ),
         "legal": re.compile(rf"\b(?P<v>{_alt(cfg['legal_words'])})\b", re.I),
         "email_sender": re.compile(r"\b[Ee]mail from (?P<v>[A-Z][\w&.' -]{1,40}?)(?=[:,.])"),
@@ -119,6 +130,7 @@ _RULE_OF = {
     "card_number": "card_number", "ssn": "ssn", "account_number": "account_number",
     "card_context": "card_number", "health_units": "health",
     "money_after_kw": "money_personal", "money_before_kw": "money_personal",
+    "money_second_person": "money_personal",
     "street_address": "street_address", "health": "health", "legal": "legal",
     "email_sender": "email_sender",
 }  # fmt: skip
@@ -157,7 +169,7 @@ def regex_spans(text: str, source_tags: set[str] | frozenset[str] = frozenset())
         for m in pattern.finditer(text):
             if rule == "otp_code" and _not_a_secret_code(text, m.start("kw")):
                 continue
-            group = "v" if m.group("v") is not None else "dr"
+            group = next(g for g in ("v", "v2", "dr") if g in m.groupdict() and m.group(g))
             if name == "card_number" and not luhn_ok(m.group(group)):  # bare numbers only
                 continue
             start, end = m.span(group)

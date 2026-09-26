@@ -46,6 +46,10 @@
 - {text: "The courier is heading to 14A Elm Street.", level: sensitive, spans: ["14A Elm Street"]}
 - {text: "Your court appearance is Monday at 10.", level: sensitive}
 - {text: "Checking has $1,240 and savings has $8,300.", level: sensitive, spans: ["$1,240", "$8,300"]}
+- {text: "You still have $86 left in this month's gas budget.", level: sensitive, spans: ["$86"]}
+- {text: "Your phone plan renewal of $70 goes through tomorrow.", level: sensitive, spans: ["$70"]}
+- {text: "Your eye exam with Dr. Amelia O'Brien is on Friday.", level: sensitive, spans: ["Dr. Amelia O'Brien"]}
+- {text: "The podiatrist can see you Thursday.", level: sensitive}
 # must stay public
 - {text: "Room 404", level: public}
 - {text: "Your flight UA 1234 boards at gate 12.", level: public}
@@ -68,3 +72,6 @@
 - {text: "Your phone battery is at 40 percent.", level: public}
 - {text: "The Warriors won 112 to 104 last night.", level: public}
 - {text: "A 12 ounce latte is about 150 calories.", level: public}
+- {text: "Bananas are 59 cents a pound at your local market.", level: public}
+- {text: "Your favorite taco place has two tacos for $5 on Tuesdays.", level: public}
+- {text: "Meteorologists expect rain after 4pm.", level: public}

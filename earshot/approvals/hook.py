@@ -274,6 +274,7 @@ class Approver:
     ) -> None:
         def denied(a: Action) -> None:
             ctx.events.publish("decision", action_id=a.id, outcome="reject", method="phone_tap")
+            ctx.speak(REJECT_LINE)
             ctx.events.led("off")
             self.audit.record(action_id=a.id, action_hash=action_hash(a), type=a.type,
                               tier=risk.tier, outcome="reject", method="phone_tap")  # fmt: skip

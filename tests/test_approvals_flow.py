@@ -189,6 +189,7 @@ def test_phone_deny_stops(world):
     assert world.pending.deny(r.action.id).changed
     assert world.pending.approve(r.action.id).status == "denied"
     assert world.pipeline.executor.executed == []
+    assert world.pipeline.tts.spoken[-1] == "Okay, I won't."
 
 
 def test_phone_request_expires(world):

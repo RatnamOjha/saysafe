@@ -185,11 +185,14 @@ def _print_turn(result) -> None:
         console.print(f"  [{color}]{d.outcome}[/]{why}")
 
 
-def _narrate(events) -> None:
-    """Print what the band says and what reaches the phone, as it happens."""
+def _narrate(events, show_you: bool = False) -> None:
+    """Print what the band says and what reaches the phone, as it happens.
+    show_you: also echo the user's transcript (live mode, where nothing was typed)."""
 
     def show(e) -> None:
-        if e.type == "spoken":
+        if e.type == "transcript" and e.data.get("text") and show_you:
+            console.print(f"[bold]you>[/] {e.data['text']}")
+        elif e.type == "spoken":
             where = "" if e.data["channel"] == "speaker" else f" [dim]({e.data['channel']})[/]"
             console.print(f"  [green]band:[/] {e.data['text']}{where}")
         elif e.type == "phone":
@@ -299,17 +302,14 @@ def live(
         _warn_if_not_enrolled()
         serve_in_background(port=port)
         console.print(f"Phone approvals: {env('EARSHOT_PUBLIC_URL', 'http://localhost:8000')}")
-        _narrate(bus)
+        _narrate(bus, show_you=True)
         if trace:
             _trace(bus)
         console.print("[green]Listening.[/] Say a command. Ctrl-C to quit.")
         try:
             while True:
                 segment = mic.next_segment()
-                result = pipeline.run_audio(segment)
-                if result is not None:
-                    console.print(f"[bold]you>[/] {result.text}")
-                    _print_turn(result)
+                _print_turn(pipeline.run_audio(segment))
         except KeyboardInterrupt:
             console.print("\nStopped.")
 

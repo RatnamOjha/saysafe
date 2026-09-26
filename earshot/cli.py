@@ -440,3 +440,141 @@ def detect(
         console.print(f"  [{s.start}:{s.end}] {s.category} ({s.source}): {s.text!r}")
     latency = ", ".join(f"{k} {v:.2f} ms" for k, v in d.latency_ms.items())
     console.print(f"[dim]latency: {latency}[/]")
+
+
+@app.command()
+def demo(
+    port: int = typer.Option(8000, help="Port (the phone's Approve button uses it too)."),
+    mic: bool = typer.Option(True, "--mic/--no-mic", help="Open the laptop mic."),
+) -> None:
+    """The band simulator page at http://localhost:8000 (demo mode: warm models, fixed code)."""
+    import os
+
+    import uvicorn
+
+    from earshot.config import env
+    from earshot.server.app import create_app
+    from earshot.server.demo import DemoSession
+
+    os.environ.setdefault("EARSHOT_DEMO", "1")
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    if env("EARSHOT_DEMO") == "1":
+        os.environ.pop("EARSHOT_AGENT", None)  # demo mode: rule-based agent only
+    session = DemoSession(open_mic=mic)
+    with console.status("Loading and warming models..."):
+        session.start()
+    if mic:
+        _warn_if_not_enrolled(session_mic_name())
+    console.print(f"[green]Open http://localhost:{port}[/]  (phone approvals: "
+                  f"{env('EARSHOT_PUBLIC_URL', '')})")  # fmt: skip
+    try:
+        uvicorn.run(create_app(session=session), host="0.0.0.0", port=port, log_level="warning")
+    finally:
+        session.stop()
+
+
+def session_mic_name() -> str:
+    from earshot.audio.capture import input_device_name
+
+    return input_device_name()
+
+
+@app.command()
+def preflight(
+    name: str = typer.Option(None, "--name", help="Owner profile (default EARSHOT_OWNER)."),
+) -> None:
+    """Check everything the demo needs, and print a pass/fail list."""
+    import os
+    import time
+    from datetime import UTC, datetime, timedelta
+
+    import httpx
+
+    from earshot.config import env
+
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    results: list[tuple[bool, str, str]] = []
+
+    def check(label: str, fn) -> None:
+        try:
+            ok, detail = fn()
+        except Exception as e:  # a failed check is a result, not a crash
+            ok, detail = False, f"{type(e).__name__}: {e}"
+        results.append((ok, label, detail))
+        mark = "[green]PASS[/]" if ok else "[red]FAIL[/]"
+        console.print(f"{mark}  {label}: {detail}")
+
+    def mic_level():
+        from earshot.audio import capture
+        from earshot.audio.io import rms_dbfs
+
+        console.print("  (recording 2 s of room sound; stay quiet)")
+        level = rms_dbfs(capture.record(2.0))
+        return level > -90, f"{capture.input_device_name()}, room level {level:.0f} dBFS"
+
+    def profile():
+        from earshot.audio.capture import input_device_name
+        from earshot.identity.profile_store import ProfileStore
+
+        owner = name or env("EARSHOT_OWNER", "owner")
+        p = ProfileStore().load(owner)
+        age = datetime.now(UTC) - p.created_at
+        fresh = age < timedelta(days=3)
+        same_mic = p.mic_name == input_device_name()
+        detail = f"{owner}, enrolled {age.days} d ago on '{p.mic_name}'"
+        if not same_mic:
+            detail += f" (current mic is '{input_device_name()}')"
+        return fresh and same_mic, detail
+
+    def ntfy():
+        topic = env("NTFY_TOPIC")
+        if not topic:
+            return False, "NTFY_TOPIC not set"
+        server = env("NTFY_SERVER", "https://ntfy.sh")
+        r = httpx.get(f"{server}/v1/health", timeout=3)
+        return r.status_code == 200, f"{server} reachable, topic set"
+
+    def phone_route():
+        url = env("EARSHOT_PUBLIC_URL", "")
+        if not url or "LAPTOP_LAN_IP" in url:
+            return False, "EARSHOT_PUBLIC_URL not set to your LAN IP"
+        return True, f"phone taps go to {url} (firewall must allow Python)"
+
+    def tts():
+        from earshot.audio.tts import PiperTTS
+
+        t = PiperTTS()
+        audio = t.synthesize("Order placed.")
+        return len(audio) > 0, f"Piper in {t.last_latency_ms:.0f} ms"
+
+    def decision():
+        from earshot.agent.channels import PhoneChannel
+        from earshot.agent.pipeline import Pipeline
+        from earshot.audio.tts import NullTTS
+        from earshot.privacy.audience import FixedAudience
+
+        p = Pipeline(tts=NullTTS(), phone=PhoneChannel(console_only=True),
+                     audience=FixedAudience("alone_likely"))  # fmt: skip
+        t0 = time.perf_counter()
+        p.warm()
+        warm_s = time.perf_counter() - t0
+        from earshot.audio.tts import PiperTTS
+
+        speech = PiperTTS().synthesize("What's my verification code?")
+        t0 = time.perf_counter()
+        r = p.run_audio(speech)
+        ms = (time.perf_counter() - t0) * 1000
+        ok = r is not None and r.speak is not None
+        return ok, f"models warm in {warm_s:.1f} s; spoken command to decision {ms:.0f} ms"
+
+    check("Mic", mic_level)
+    check("Owner profile (this mic, < 3 days)", profile)
+    check("ntfy", ntfy)
+    check("Phone approval URL", phone_route)
+    check("TTS", tts)
+    check("Models + one decision", decision)
+    failed = [label for ok, label, _ in results if not ok]
+    console.print("\n[green]All green.[/] Mic on for 45 s before scene 4." if not failed
+                  else f"\n[red]{len(failed)} failed:[/] {', '.join(failed)}")  # fmt: skip
+    if failed:
+        raise typer.Exit(1)

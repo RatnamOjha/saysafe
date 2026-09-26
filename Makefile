@@ -1,4 +1,4 @@
-.PHONY: setup models test test-all lint format demo eval video
+.PHONY: setup models test test-all lint format demo preflight eval video
 
 setup:
 	uv sync
@@ -22,7 +22,10 @@ format:
 	uv run ruff format .
 
 demo:
-	@echo "demo: not built yet (D2)"
+	EARSHOT_DEMO=1 uv run earshot demo
+
+preflight:
+	uv run earshot preflight
 
 eval:
 	@echo "eval: not built yet (E3)"

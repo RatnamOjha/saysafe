@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>earshot</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">earshot <span class="sub">band simulator</span></div>
+    <div class="status">
+      <span id="scene-title" class="scene"></span>
+      <span id="chip-mic" class="chip">Mic off</span>
+      <span id="chip-audience" class="chip">Room unknown</span>
+      <span id="chip-headphones" class="chip off">Headphones</span>
+      <span id="chip-discreet" class="chip off">Discreet</span>
+      <span id="conn" class="chip bad">Disconnected</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="band">
+      <canvas id="ring" width="560" height="560" aria-label="Band light ring"></canvas>
+      <div id="led-label" class="led-label">idle</div>
+      <div class="caption-label">Band says</div>
+      <div id="caption" class="caption">…</div>
+      <div id="scene-lines" class="scene-lines"></div>
+    </section>
+
+    <section class="transcript">
+      <h2>Transcript</h2>
+      <ol id="lines"></ol>
+      <form id="text-form" autocomplete="off">
+        <input id="text-input" placeholder="Type a command (Enter)" aria-label="Type a command">
+      </form>
+    </section>
+
+    <section class="side">
+      <div class="why">
+        <h2>Why</h2>
+        <div id="cards"><p class="empty">Decisions show up here.</p></div>
+      </div>
+      <div class="phone" aria-label="Phone">
+        <div class="phone-bar">Phone</div>
+        <div id="phone-feed"><p class="empty">Nothing yet.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span><kbd>M</kbd> mic</span><span><kbd>H</kbd> headphones</span><span><kbd>D</kbd> discreet</span>
+    <span><kbd>R</kbd> reset</span><span><kbd>1</kbd>–<kbd>7</kbd> scenes</span>
+    <span class="note">Independent concept. Not affiliated with any wearable company.</span>
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

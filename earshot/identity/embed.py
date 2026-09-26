@@ -1,5 +1,6 @@
 """ECAPA speaker embedding of the speech-only part of a clip."""
 
+import logging
 import time
 from dataclasses import dataclass
 from functools import lru_cache
@@ -34,9 +35,13 @@ def _encoder():
     path = cache_dir() / "ecapa"
     if not (path / "embedding_model.ckpt").exists():
         raise FileNotFoundError(f"ECAPA model not found in {path}. Run: make models")
-    return EncoderClassifier.from_hparams(
-        source=str(path), savedir=str(path), run_opts={"device": "cpu"}
-    )
+    logging.disable(logging.INFO)  # speechbrain logs "Fetch ..." chatter at INFO while loading
+    try:
+        return EncoderClassifier.from_hparams(
+            source=str(path), savedir=str(path), run_opts={"device": "cpu"}
+        )
+    finally:
+        logging.disable(logging.NOTSET)
 
 
 def embed(audio: np.ndarray) -> Embedding:

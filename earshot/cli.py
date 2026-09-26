@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 
+import numpy as np
 import typer
 from rich.console import Console
 
@@ -14,6 +15,27 @@ console = Console()
 def main(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     """earshot: voice-locked approvals and private replies for a screenless wearable."""
     logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(message)s")
+    if not verbose:
+        _quiet_libraries()
+
+
+def _quiet_libraries() -> None:
+    """Model libraries print loading chatter and deprecation warnings; hide them."""
+    import warnings
+
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    for name in ("speechbrain", "faster_whisper", "httpx", "piper"):
+        logging.getLogger(name).setLevel(logging.ERROR)
+
+
+def _load_voice_models() -> None:
+    from earshot.audio import vad
+    from earshot.identity.embed import _encoder
+
+    with console.status("Loading voice model..."):
+        vad.segments(np.zeros(16000, dtype=np.float32))
+        _encoder()
 
 
 @app.command("llm-ping")
@@ -94,6 +116,7 @@ def enroll(name: str = typer.Option(..., "--name")) -> None:
     mic = capture.input_device_name()
     console.print(f"Enrolling [bold]{name}[/] with mic [bold]{mic}[/].")
     console.print("Use the room and mic you'll demo with. Speak normally. Each clip is 3 s.\n")
+    _load_voice_models()
     console.print("For each clip: read the line, press Enter, then say it [bold]out loud[/].\n")
 
     def ready(prompt: str) -> None:
@@ -127,6 +150,7 @@ def verify(
     t = v.thresholds()
     if not live and not file:
         _fail("Use --live or --file.")
+    _load_voice_models()
 
     table = Table(title=f"verify {name}  (accept >= {t.t_accept}, reject < {t.t_reject})")
     for col in ("#", "score", "band", "speech s", "ms"):

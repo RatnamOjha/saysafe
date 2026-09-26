@@ -1,1 +1,60 @@
-# Approval policy rules and tier bump (B1).
+# How much proof each action needs. Tiers, weakest to strongest:
+#   none            just do it
+#   voice           read back, the owner says yes
+#   voice_challenge read back, the owner says a one-time word
+#   phone_tap       tap Approve on the phone
+#
+# Rules are checked in order; the first match wins. Conditions in `when` all must hold:
+#   type, type_in, is_new_counterparty, amount_over, amount_at_least, amount_under_or_missing
+# Reasons may use {counterparty} and {amount}.
+
+rules:
+  - id: new_payee
+    when: {type: send_money, is_new_counterparty: true}
+    tier: phone_tap
+    reason: "New payee: you haven't paid {counterparty} before"
+
+  - id: over_200
+    when: {amount_over: 200}
+    tier: phone_tap
+    reason: "Over $200"
+
+  - id: send_money
+    when: {type: send_money}
+    tier: voice_challenge
+    reason: "Money leaves your account"
+
+  - id: purchase_75_plus
+    when: {type_in: [order_food, book_appointment, cancel_subscription], amount_at_least: 75}
+    tier: voice_challenge
+    reason: "$75 or more"
+
+  - id: purchase_under_75
+    when: {type_in: [order_food, book_appointment, cancel_subscription], amount_under_or_missing: 75}
+    tier: voice
+    reason: "Under $75"
+
+  - id: email_known_contact
+    when: {type: send_email, is_new_counterparty: false}
+    tier: voice
+    reason: "Email to a known contact"
+
+  - id: low_risk
+    when: {type_in: [set_reminder]}
+    tier: none
+    reason: "Low risk, easy to undo"
+
+  - id: default
+    when: {}
+    tier: phone_tap
+    reason: "Not covered by a rule, so it needs the strongest check"
+
+# If the action didn't come from the owner's own request, raise one tier.
+# That's how prompt injection turns into real money moving, so it needs stronger proof.
+source_bump:
+  agent_initiated: "Suggested by the assistant, not by you"
+  from_content: "Triggered by an email, not by you"
+
+challenge:
+  ttl_s: 30          # a challenge word expires this long after it's issued
+  avoid_recent: 50   # never reissue one of the last N words

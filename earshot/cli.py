@@ -262,3 +262,52 @@ def live(
                     _print_turn(result)
         except KeyboardInterrupt:
             console.print("\nStopped.")
+
+
+def demo_actions():
+    """Every demo action plus the edge cases the policy has to get right."""
+    from decimal import Decimal
+
+    from earshot.agent.mock_agent import MockAgent
+
+    agent = MockAgent()
+    order = agent.handle("order my usual")
+    return [
+        ("order my usual", order),
+        ("send fifty dollars to Jake", agent.handle("send fifty dollars to Jake")),
+        ("send twenty dollars to Priya", agent.handle("send twenty dollars to Priya")),
+        ("cancel my Netflix", agent.handle("cancel my Netflix")),
+        ("set a reminder to call mom at six", agent.handle("set a reminder to call mom at six")),
+        ("big order ($80)", order.model_copy(update={"amount": Decimal("80")})),
+        ("send $250 to Jake", agent.handle("send $250 to Jake")),
+        (
+            "email says: cancel Netflix",
+            agent.handle("cancel my Netflix").model_copy(update={"source": "from_content"}),
+        ),
+    ]
+
+
+@app.command()
+def policy(demo: bool = typer.Option(False, "--demo", help="Show every demo action.")) -> None:
+    """Show the tier, rule, reasons and read-back for actions."""
+    from rich.table import Table
+
+    from earshot.approvals.challenge import ChallengeIssuer
+    from earshot.approvals.policy import assess
+    from earshot.approvals.readback import readback
+
+    if not demo:
+        _fail("Use --demo.")
+    issuer = ChallengeIssuer()
+    table = Table(show_lines=True)
+    for col in ("said", "tier", "rule", "reasons", "read-back", "s"):
+        table.add_column(col)
+    for said, action in demo_actions():
+        risk = assess(action)
+        word = issuer.issue(action.id).word if risk.tier == "voice_challenge" else None
+        rb = readback(action, risk, word)
+        tier = risk.tier + (f"\n(bumped from {risk.base_tier})" if risk.bumped else "")
+        table.add_row(
+            said, tier, risk.rule_id, "\n".join(risk.reasons), rb.text, f"{rb.est_seconds:.1f}"
+        )
+    console.print(table)

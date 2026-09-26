@@ -1,1 +1,26 @@
-# VAD and capture settings (A2).
+# Audio settings. Everything runs at 16 kHz mono float32.
+sample_rate: 16000
+
+vad:
+  threshold: 0.5          # silero speech probability to start speech
+  neg_threshold: 0.35     # probability below which a frame counts as silence
+  min_speech_ms: 250      # shorter bursts are dropped
+  min_silence_ms: 400     # this much silence ends a segment
+  speech_pad_ms: 30       # kept before/after each segment
+  max_segment_s: 15       # force-emit very long segments
+
+stt:
+  command_model: small.en  # commands: more accurate
+  reply_model: base.en     # short approval replies: faster
+  compute_type: int8
+  beam_size: 1
+  groq_model: whisper-large-v3-turbo
+
+tts:
+  piper_voice: en_US-lessac-medium
+
+enroll:
+  clip_seconds: 3
+  min_speech_s: 0.8        # embed() raises TooShort below this
+  min_cosine_to_median: 0.5  # clips below this get re-recorded
+  max_rerecord_rounds: 3

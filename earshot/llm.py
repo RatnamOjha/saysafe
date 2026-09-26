@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 ModelTier = Literal["fast", "smart"]
 
-_DEFAULT_MODELS = {"fast": "openai/gpt-oss-20b", "smart": "llama-3.3-70b-versatile"}
+_DEFAULT_MODELS = {"fast": "openai/gpt-oss-20b", "smart": "openai/gpt-oss-120b"}
 
 
 @dataclass

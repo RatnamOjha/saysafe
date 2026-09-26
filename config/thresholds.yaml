@@ -1,1 +1,5 @@
-# Speaker-verify thresholds. Placeholders until eval calibrates them (A2, E3).
+# Speaker verification thresholds (cosine to the owner's mean embedding).
+# PLACEHOLDERS. eval/speaker_eval.py calibrates these on held-out data and writes
+# config/thresholds.calibrated.yaml, which takes precedence when it exists.
+t_accept: 0.45   # score >= t_accept -> accept
+t_reject: 0.25   # score <  t_reject -> reject; in between -> uncertain

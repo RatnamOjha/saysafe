@@ -1,1 +1,17 @@
-# Sensitivity x audience routing table (C2).
+# Who's listening, and where each reply goes.
+
+audience:
+  window_s: 45            # another voice within this long -> others_present
+  memory_s: 60            # observations older than this are forgotten
+  min_segment_s: 1.0      # shorter segments aren't scored (too noisy)
+  # Labels for a segment's cosine to the owner. PLACEHOLDERS from ~10 live clips
+  # (owner 0.44-0.76, one friend 0.10-0.27); eval calibrates them.
+  owner_at_least: 0.38    # >= this: owner
+  other_below: 0.30       # < this: other; in between: unclear, which counts as other
+
+# Where a reply goes, by sensitivity level x audience state (C2).
+table:
+  public:    {alone_likely: speak, unknown: speak,          others_present: speak}
+  personal:  {alone_likely: speak, unknown: speak,          others_present: redacted_and_phone}
+  sensitive: {alone_likely: speak, unknown: redacted_and_phone, others_present: redacted_and_phone}
+  secret:    {alone_likely: speak, unknown: phone,          others_present: phone}

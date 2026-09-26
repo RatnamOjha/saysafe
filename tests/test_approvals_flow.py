@@ -51,7 +51,7 @@ class FakeScorer:
         self.reply: float | None = 0.8
         self.speech = 1.2
 
-    def score_audio(self, audio):
+    def score_audio(self, audio, min_speech_s=None):
         s = self.reply
         return VerifyResult(s, "uncertain" if s is None else band(s, T), self.speech, 3.0)
 

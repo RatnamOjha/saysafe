@@ -234,6 +234,27 @@ def _warn_if_not_enrolled() -> None:
         )
 
 
+def _watch_audience(tracker) -> None:
+    """Print the audience level whenever it changes (it also changes as time passes)."""
+    import threading
+    import time
+
+    def loop() -> None:
+        last = None
+        while True:
+            state = tracker.state()
+            if state.level != last:
+                color = {"alone_likely": "green", "unknown": "yellow", "others_present": "red"}
+                console.print(
+                    f"  [{color[state.level]}]audience: {state.level}[/] "
+                    f"[dim]({'; '.join(state.evidence)})[/]"
+                )
+                last = state.level
+            time.sleep(1)
+
+    threading.Thread(target=loop, daemon=True, name="audience-watch").start()
+
+
 def _typed_reply(timeout_s: float) -> str | None:
     """Chat mode: the approval reply is typed. Typed text carries no voice evidence."""
     try:
@@ -281,6 +302,7 @@ def chat(
 def live(
     phone: bool = typer.Option(True, "--phone/--no-phone", help="Send phone messages to ntfy."),
     port: int = typer.Option(8000, help="Port for the phone approval routes."),
+    audience: bool = typer.Option(False, "--audience", help="Print who's-listening changes."),
     trace: bool = typer.Option(False, "--trace", help="Print trace events."),
 ) -> None:
     """Mic mode: speak one command at a time; the band answers out loud."""
@@ -295,14 +317,22 @@ def live(
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     console.print(f"Loading models... (mic: [bold]{input_device_name()}[/])")
+    from earshot.privacy.audience import AudienceTracker, owner_score_fn
+
+    tracker = AudienceTracker(score=owner_score_fn())
     with MicStream() as stream:
-        mic = LiveMic(stream)
-        pipeline = Pipeline(phone=PhoneChannel(console_only=not phone), listen=mic.listen)
+        mic = LiveMic(stream, on_segment=tracker.observe_segment)
+        tracker.mic_on()
+        pipeline = Pipeline(
+            phone=PhoneChannel(console_only=not phone), listen=mic.listen, audience=tracker
+        )
         pipeline.warm()
         _warn_if_not_enrolled()
         serve_in_background(port=port)
         console.print(f"Phone approvals: {env('EARSHOT_PUBLIC_URL', 'http://localhost:8000')}")
         _narrate(bus, show_you=True)
+        if audience:
+            _watch_audience(tracker)
         if trace:
             _trace(bus)
         console.print("[green]Listening.[/] Say a command. Ctrl-C to quit.")
@@ -361,3 +391,26 @@ def policy(demo: bool = typer.Option(False, "--demo", help="Show every demo acti
             said, tier, risk.rule_id, "\n".join(risk.reasons), rb.text, f"{rb.est_seconds:.1f}"
         )
     console.print(table)
+
+
+@app.command()
+def detect(
+    text: str,
+    tag: list[str] = typer.Option(None, "--tag", "-t", help="Source hint: otp, bank, health..."),
+) -> None:
+    """Show how sensitive a reply is: level, flagged spans, latency per layer."""
+    from rich.text import Text
+
+    from earshot.privacy.detect import detect as run_detect
+
+    d = run_detect(text, set(tag or []))
+    color = {"public": "green", "personal": "cyan", "sensitive": "yellow", "secret": "red"}
+    console.print(f"level: [bold {color[d.level]}]{d.level}[/]   categories: {d.categories}")
+    marked = Text(text)
+    for s in d.spans:
+        marked.stylize("bold reverse", s.start, s.end)
+    console.print(marked)
+    for s in d.spans:
+        console.print(f"  [{s.start}:{s.end}] {s.category} ({s.source}): {s.text!r}")
+    latency = ", ".join(f"{k} {v:.2f} ms" for k, v in d.latency_ms.items())
+    console.print(f"[dim]latency: {latency}[/]")

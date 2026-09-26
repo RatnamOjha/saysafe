@@ -141,7 +141,10 @@ def test_order_usual_says_order_placed(pipeline, events):
     assert result.action.type == "order_food"
 
 
-def test_code_is_spoken_with_stub_hook(pipeline):
+def test_code_is_spoken_when_alone(pipeline):
+    from earshot.privacy.audience import FixedAudience
+
+    pipeline.audience = FixedAudience("alone_likely")
     pipeline.run_text("what's my verification code")
     assert pipeline.tts.spoken == ["Your Chase verification code is 482913."]
 
@@ -225,3 +228,41 @@ def test_run_audio_too_short_command(pipeline):
 def test_run_audio_ignores_empty_transcript(pipeline):
     pipeline._stt = FakeSTT("  ")
     assert pipeline.run_audio(np.zeros(8000, dtype=np.float32)) is None
+
+
+def test_spoken_chatter_is_ignored_but_typed_gets_an_answer(pipeline, events):
+    pipeline._stt = FakeSTT("did you watch the game last night")
+    pipeline.embedder = lambda audio: Embedding(np.ones(192, np.float32), 1.5, 1.0)
+    result = pipeline.run_audio(np.zeros(16000, dtype=np.float32))
+    assert result.reply is None and pipeline.tts.spoken == []
+    assert any(e.type == "ignored" for e in events.log)
+    pipeline.run_text("did you watch the game last night")
+    assert "can't help" in pipeline.tts.spoken[-1]
+
+
+def test_live_mic_reports_every_segment_to_the_observer():
+    import queue as q
+
+    from earshot.agent.pipeline import LiveMic
+    from earshot.audio.vad import FRAME, StreamingVAD
+
+    class FakeStream:
+        def __init__(self, frames):
+            self.q = q.Queue()
+            self.frames = frames
+
+        def read(self, timeout=None):
+            if self.frames:
+                return self.frames.pop(0)
+            raise q.Empty
+
+    pattern = [1] * 20 + [0] * 30
+    frames = [np.full(FRAME, p, np.float32) for p in pattern]
+    seen = []
+    mic = LiveMic(
+        FakeStream(frames),
+        vad_factory=lambda **kw: StreamingVAD(prob_fn=lambda f: float(f[0]), **kw),
+        on_segment=seen.append,
+    )
+    mic.drain = lambda: None
+    assert mic.listen(1.0) is not None and len(seen) == 1

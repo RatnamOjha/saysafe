@@ -26,6 +26,7 @@ from earshot.audio.tts import TTS, get_tts
 from earshot.audio.vad import StreamingVAD
 from earshot.identity.embed import Embedding, TooShort, embed
 from earshot.privacy import hook as privacy_hook
+from earshot.privacy.audience import AudienceTracker
 from earshot.privacy.hook import SpeakDecision
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,8 @@ class TurnContext:
     events: EventBus
     flags: dict[str, bool]
     complete_approved: Callable[[Action, str], None] = lambda action, token: None
+    audience: AudienceTracker | None = None  # None: no mic, so nothing is known about the room
+    spoken_command: bool = False  # True when the turn came from the mic
     command_embedding: Embedding | None = None  # None: text mode, or too little speech
     command_speech_seconds: float = 0.0
     turn_id: str = field(default_factory=lambda: uuid4().hex[:8])
@@ -75,6 +78,7 @@ class Pipeline:
         events: EventBus = bus,
         listen: Listen = _never_listen,
         embedder: Callable[[np.ndarray], Embedding] = embed,
+        audience: AudienceTracker | None = None,
     ):
         self.events = events
         self.tts = tts or get_tts()
@@ -87,6 +91,7 @@ class Pipeline:
         self.listen = listen
         self.embedder = embedder
         self.flags = {"headphones": False, "discreet_mode": False}
+        self.audience = audience
 
     @property
     def stt(self) -> STT:
@@ -121,6 +126,7 @@ class Pipeline:
             self.events.led("idle")
             return None
         ctx = self._context(transcript.text)
+        ctx.spoken_command = True
         with self.events.step("speaker_embedded") as out:
             try:
                 ctx.command_embedding = self.embedder(segment)
@@ -144,6 +150,7 @@ class Pipeline:
             events=self.events,
             flags=self.flags,
             complete_approved=self.complete_approved,
+            audience=self.audience,
         )
 
     def _run(self, ctx: TurnContext) -> TurnResult:
@@ -163,6 +170,12 @@ class Pipeline:
                 result.reply = Reply(text=result.decision.message)
         else:
             result.reply = handled
+
+        if ctx.spoken_command and result.reply is not None and not result.reply.understood:
+            # No wake word: the mic hears everything, so stay quiet on speech that
+            # isn't a request (a friend chatting, the TV).
+            self.events.publish("ignored", text=ctx.text)
+            result.reply = None
 
         if result.reply is not None:
             result.speak = self._deliver(result.reply, ctx)
@@ -221,9 +234,17 @@ class LiveMic:
     speaker plays, drain() throws away whatever the mic heard meanwhile.
     """
 
-    def __init__(self, mic, vad_factory: Callable[[], StreamingVAD] = StreamingVAD):
+    def __init__(
+        self,
+        mic,
+        vad_factory: Callable[..., StreamingVAD] = StreamingVAD,
+        on_segment: Callable[[np.ndarray], None] | None = None,
+    ):
+        """on_segment sees every speech segment (commands and replies), e.g. the
+        audience tracker."""
         self.mic = mic
         self.vad_factory = vad_factory
+        self.on_segment = on_segment
 
     def drain(self) -> None:
         while True:
@@ -257,5 +278,10 @@ class LiveMic:
                 continue
             done = vad.feed(frame)
             if done:
-                return done[0]
-        return vad.flush()
+                return self._seen(done[0])
+        return self._seen(vad.flush())
+
+    def _seen(self, segment: np.ndarray | None) -> np.ndarray | None:
+        if segment is not None and self.on_segment is not None:
+            self.on_segment(segment)
+        return segment

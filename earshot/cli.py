@@ -224,14 +224,41 @@ def _trace(events) -> None:
     events.subscribe(show)
 
 
-def _warn_if_not_enrolled() -> None:
+def _warn_if_not_enrolled(mic: str) -> None:
     from earshot.approvals.hook import get_approver
 
-    if get_approver().scorer is None:
+    scorer = get_approver().scorer
+    if scorer is None:
         console.print(
             "[yellow]No owner voice profile loaded (EARSHOT_OWNER in .env).[/] "
             "Every voice approval will step up to a phone tap."
         )
+    elif scorer.profile.mic_name != mic:
+        console.print(
+            f"[yellow]You enrolled with '{scorer.profile.mic_name}' but this is '{mic}'.[/] "
+            "Voice scores will be lower. Re-enroll with the mic you'll demo with."
+        )
+
+
+def _watch_audience(tracker) -> None:
+    """Print the audience level whenever it changes (it also changes as time passes)."""
+    import threading
+    import time
+
+    def loop() -> None:
+        last = None
+        while True:
+            state = tracker.state()
+            if state.level != last:
+                color = {"alone_likely": "green", "unknown": "yellow", "others_present": "red"}
+                console.print(
+                    f"  [{color[state.level]}]audience: {state.level}[/] "
+                    f"[dim]({'; '.join(state.evidence)})[/]"
+                )
+                last = state.level
+            time.sleep(1)
+
+    threading.Thread(target=loop, daemon=True, name="audience-watch").start()
 
 
 def _typed_reply(timeout_s: float) -> str | None:
@@ -248,6 +275,11 @@ def chat(
     speak: bool = typer.Option(False, "--speak", help="Play replies through Piper."),
     phone: bool = typer.Option(False, "--phone", help="Send phone messages to ntfy."),
     trace: bool = typer.Option(False, "--trace", help="Print trace events."),
+    room: str = typer.Option(
+        "unknown", help="Pretend room: alone, unknown or others (text mode has no mic)."
+    ),
+    headphones: bool = typer.Option(False, "--headphones", help="Pretend headphones are in."),
+    discreet: bool = typer.Option(False, "--discreet", help="Turn on discreet mode."),
 ) -> None:
     """Text mode: type what you'd say to the band."""
     import os
@@ -256,13 +288,20 @@ def chat(
     from earshot.agent.events import bus
     from earshot.agent.pipeline import Pipeline
     from earshot.audio.tts import NullTTS, PiperTTS
+    from earshot.privacy.audience import FixedAudience
 
+    if room not in ("alone", "unknown", "others"):
+        _fail("--room must be alone, unknown or others")
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     pipeline = Pipeline(
         tts=PiperTTS() if speak else NullTTS(),
         phone=PhoneChannel(console_only=not phone),
         listen=_typed_reply,
+        audience=FixedAudience(
+            {"alone": "alone_likely", "unknown": "unknown", "others": "others_present"}[room]
+        ),
     )
+    pipeline.flags.update(headphones=headphones, discreet_mode=discreet)
     _narrate(bus)
     if trace:
         _trace(bus)
@@ -281,6 +320,7 @@ def chat(
 def live(
     phone: bool = typer.Option(True, "--phone/--no-phone", help="Send phone messages to ntfy."),
     port: int = typer.Option(8000, help="Port for the phone approval routes."),
+    audience: bool = typer.Option(False, "--audience", help="Print who's-listening changes."),
     trace: bool = typer.Option(False, "--trace", help="Print trace events."),
 ) -> None:
     """Mic mode: speak one command at a time; the band answers out loud."""
@@ -295,14 +335,30 @@ def live(
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     console.print(f"Loading models... (mic: [bold]{input_device_name()}[/])")
+    from earshot.privacy.audience import AudienceTracker, owner_score_fn
+
+    tracker = AudienceTracker(score=owner_score_fn())
+
+    def observe(segment) -> None:
+        obs = tracker.observe_segment(segment)
+        if audience and obs is not None:
+            who = {"owner": "you", "other": "other", "unclear": "unclear"}[obs.label]
+            score = "?" if obs.score is None else f"{obs.score:.2f}"
+            console.print(f"  [dim](voice: {who} {score})[/]")
+
     with MicStream() as stream:
-        mic = LiveMic(stream)
-        pipeline = Pipeline(phone=PhoneChannel(console_only=not phone), listen=mic.listen)
+        mic = LiveMic(stream, on_segment=observe)
+        tracker.mic_on()
+        pipeline = Pipeline(
+            phone=PhoneChannel(console_only=not phone), listen=mic.listen, audience=tracker
+        )
         pipeline.warm()
-        _warn_if_not_enrolled()
+        _warn_if_not_enrolled(input_device_name())
         serve_in_background(port=port)
         console.print(f"Phone approvals: {env('EARSHOT_PUBLIC_URL', 'http://localhost:8000')}")
         _narrate(bus, show_you=True)
+        if audience:
+            _watch_audience(tracker)
         if trace:
             _trace(bus)
         console.print("[green]Listening.[/] Say a command. Ctrl-C to quit.")
@@ -361,3 +417,26 @@ def policy(demo: bool = typer.Option(False, "--demo", help="Show every demo acti
             said, tier, risk.rule_id, "\n".join(risk.reasons), rb.text, f"{rb.est_seconds:.1f}"
         )
     console.print(table)
+
+
+@app.command()
+def detect(
+    text: str,
+    tag: list[str] = typer.Option(None, "--tag", "-t", help="Source hint: otp, bank, health..."),
+) -> None:
+    """Show how sensitive a reply is: level, flagged spans, latency per layer."""
+    from rich.text import Text
+
+    from earshot.privacy.detect import detect as run_detect
+
+    d = run_detect(text, set(tag or []))
+    color = {"public": "green", "personal": "cyan", "sensitive": "yellow", "secret": "red"}
+    console.print(f"level: [bold {color[d.level]}]{d.level}[/]   categories: {d.categories}")
+    marked = Text(text)
+    for s in d.spans:
+        marked.stylize("bold reverse", s.start, s.end)
+    console.print(marked)
+    for s in d.spans:
+        console.print(f"  [{s.start}:{s.end}] {s.category} ({s.source}): {s.text!r}")
+    latency = ", ".join(f"{k} {v:.2f} ms" for k, v in d.latency_ms.items())
+    console.print(f"[dim]latency: {latency}[/]")

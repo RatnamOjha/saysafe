@@ -27,6 +27,7 @@ CODE_PERIOD_S = 60
 class Reply(BaseModel):
     text: str
     source_tags: set[SourceTag] = Field(default_factory=lambda: {"public"})
+    understood: bool = True  # False: not a request the agent recognized
 
 
 @lru_cache
@@ -136,7 +137,7 @@ class MockAgent:
         if m := re.search(r"\bremind(?:er)?\b(?: me)?(?: to)? (.+?)(?: at (.+))?$", t):
             what = re.sub(r"^(?:a )?(?:reminder )?to ", "", m.group(1)).strip()
             return self.set_reminder(what, (m.group(2) or "").strip() or None)
-        return Reply(text="Sorry, I can't help with that yet.")
+        return Reply(text="Sorry, I can't help with that yet.", understood=False)
 
     # intents (also the LLM tools)
 

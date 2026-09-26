@@ -20,8 +20,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
-import numpy as np
-
 from earshot.approvals.actions import Action, action_hash
 from earshot.approvals.audit import AuditLog
 from earshot.approvals.challenge import ChallengeIssuer
@@ -31,14 +29,13 @@ from earshot.approvals.policy import RiskAssessment, assess
 from earshot.approvals.readback import readback
 from earshot.approvals.response import Match, match_response
 from earshot.approvals.tokens import TokenService, default_service
-from earshot.config import env, load_yaml
+from earshot.config import load_yaml
+from earshot.identity.owner import VoiceScorer, load_owner_scorer
 from earshot.identity.verify import Thresholds, VerifyResult, thresholds
 
 if TYPE_CHECKING:
     from earshot.agent.pipeline import TurnContext
     from earshot.audio.stt import STT
-    from earshot.identity.embed import Embedding
-    from earshot.identity.profile_store import Profile
 
 log = logging.getLogger(__name__)
 
@@ -54,40 +51,6 @@ class ApprovalDecision:
     token: str | None = None  # present only when outcome == "approve"
     message: str | None = None  # what to say after the decision, if anything
     reasons: list[str] = field(default_factory=list)
-
-
-class VoiceScorer:
-    """Scores audio and command embeddings against the owner's profile."""
-
-    def __init__(self, profile: Profile):
-        self.profile = profile
-
-    def score_audio(self, audio: np.ndarray) -> VerifyResult:
-        """Replies are short, so they use the reply minimum, not the enrollment one."""
-        from functools import partial
-
-        from earshot.identity.embed import embed
-        from earshot.identity.verify import verify
-
-        minimum = load_yaml("policy")["voice"]["min_reply_speech_s"]
-        return verify(audio, self.profile, embedder=partial(embed, min_speech_s=minimum))
-
-    def score_embedding(self, embedding: Embedding) -> float:
-        from earshot.identity.embed import cosine
-
-        return cosine(embedding.vector, self.profile.mean)
-
-
-def load_owner_scorer() -> VoiceScorer | None:
-    """The enrolled owner's scorer, or None (which makes every voice check step up)."""
-    from earshot.identity.profile_store import ProfileError, ProfileStore
-
-    name = env("EARSHOT_OWNER", "owner")
-    try:
-        return VoiceScorer(ProfileStore().load(name))
-    except ProfileError as e:
-        log.warning("approvals: no usable owner profile (%s); voice approvals will step up", e)
-        return None
 
 
 def fuse(
@@ -222,7 +185,8 @@ class Approver:
             transcript = self.stt.transcribe(heard).text
             latency["stt"] = _ms(t0)
             t0 = time.perf_counter()
-            reply_result = self.scorer.score_audio(heard) if self.scorer else None
+            minimum = self.cfg["min_reply_speech_s"]  # replies are short; see policy.yaml
+            reply_result = self.scorer.score_audio(heard, minimum) if self.scorer else None
             latency["speaker"] = _ms(t0)
         ev.publish(
             "reply_captured", text=transcript, timed_out=False,

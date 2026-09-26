@@ -140,3 +140,95 @@ def verify(
             str(i), score, f"[{color}]{r.band}[/]", f"{r.speech_seconds:.1f}", f"{r.latency_ms:.0f}"
         )
     console.print(table)
+
+
+def _print_turn(result) -> None:
+    if result is None:
+        return
+    if result.action is not None:
+        a = result.action
+        amount = f" ${a.amount}" if a.amount is not None else ""
+        console.print(f"  [cyan]action[/] {a.type} {a.counterparty or ''}{amount}".rstrip())
+        if result.decision is not None:
+            console.print(f"  [cyan]approval[/] {result.decision.outcome}")
+    if result.speak is not None:
+        s = result.speak
+        if s.spoken_text:
+            console.print(f"  [green]band says[/] {s.spoken_text}  [dim]({s.channel})[/]")
+        if s.phone_text:
+            console.print(f"  [magenta]phone[/] {s.phone_text}")
+
+
+def _trace(events) -> None:
+    def show(e) -> None:
+        if e.type in ("led", "tts", "spoken", "phone"):
+            return
+        ms = f" {e.latency_ms:.0f} ms" if e.latency_ms is not None else ""
+        data = {k: v for k, v in e.data.items() if k != "result"}
+        console.print(f"  [dim]· {e.type}{ms} {data}[/]")
+
+    events.subscribe(show)
+
+
+@app.command()
+def chat(
+    speak: bool = typer.Option(False, "--speak", help="Play replies through Piper."),
+    phone: bool = typer.Option(False, "--phone", help="Send phone messages to ntfy."),
+    trace: bool = typer.Option(False, "--trace", help="Print trace events."),
+) -> None:
+    """Text mode: type what you'd say to the band."""
+    import os
+
+    from earshot.agent.channels import PhoneChannel
+    from earshot.agent.events import bus
+    from earshot.agent.pipeline import Pipeline
+    from earshot.audio.tts import NullTTS, PiperTTS
+
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    pipeline = Pipeline(
+        tts=PiperTTS() if speak else NullTTS(), phone=PhoneChannel(console_only=not phone)
+    )
+    if trace:
+        _trace(bus)
+    console.print("Type a command (Ctrl-D to quit). Try: order my usual")
+    while True:
+        try:
+            text = console.input("[bold]you>[/] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            return
+        if text:
+            _print_turn(pipeline.run_text(text))
+
+
+@app.command()
+def live(
+    phone: bool = typer.Option(True, "--phone/--no-phone", help="Send phone messages to ntfy."),
+    trace: bool = typer.Option(False, "--trace", help="Print trace events."),
+) -> None:
+    """Mic mode: speak one command at a time; the band answers out loud."""
+    import os
+
+    from earshot.agent.channels import PhoneChannel
+    from earshot.agent.events import bus
+    from earshot.agent.pipeline import LiveMic, Pipeline
+    from earshot.audio.capture import MicStream, input_device_name
+
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    console.print(f"Loading models... (mic: [bold]{input_device_name()}[/])")
+    with MicStream() as stream:
+        mic = LiveMic(stream)
+        pipeline = Pipeline(phone=PhoneChannel(console_only=not phone), listen=mic.listen)
+        pipeline.warm()
+        if trace:
+            _trace(bus)
+        console.print("[green]Listening.[/] Say a command. Ctrl-C to quit.")
+        try:
+            while True:
+                segment = mic.next_segment()
+                result = pipeline.run_audio(segment)
+                if result is not None:
+                    console.print(f"[bold]you>[/] {result.text}")
+                    _print_turn(result)
+        except KeyboardInterrupt:
+            console.print("\nStopped.")

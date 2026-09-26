@@ -84,12 +84,16 @@ class StreamingVAD:
     silero; tests pass a fake.
     """
 
-    def __init__(self, prob_fn: Callable[[np.ndarray], float] | None = None):
+    def __init__(
+        self,
+        prob_fn: Callable[[np.ndarray], float] | None = None,
+        min_silence_ms: float | None = None,
+    ):
         cfg = _cfg()
         self.threshold = cfg["threshold"]
         self.neg_threshold = cfg["neg_threshold"]
         self.min_speech_frames = _frames(cfg["min_speech_ms"])
-        self.min_silence_frames = _frames(cfg["min_silence_ms"])
+        self.min_silence_frames = _frames(min_silence_ms or cfg["min_silence_ms"])
         self.max_frames = _frames(cfg["max_segment_s"] * 1000)
         self._pad = _frames(cfg["speech_pad_ms"])
         self._prob = prob_fn or silero_prob()

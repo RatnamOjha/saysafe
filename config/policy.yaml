@@ -63,6 +63,8 @@ voice:
   reply_weight: 0.6      # fused = 0.6 x reply score + 0.4 x command score
   command_weight: 0.4    # the reply alone is used if the command was too short
   reply_timeout_s: 8     # no reply in this long -> reject
+  min_reply_speech_s: 0.35  # replies are short ("tunnel" is ~0.4 s); enrollment keeps 0.8 s.
+                            # PLACEHOLDER: short clips score noisier, E3 measures this.
 
 tokens:
   ttl_s: 60              # an approval token must be used within this long

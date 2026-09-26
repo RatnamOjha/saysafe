@@ -63,9 +63,14 @@ class VoiceScorer:
         self.profile = profile
 
     def score_audio(self, audio: np.ndarray) -> VerifyResult:
+        """Replies are short, so they use the reply minimum, not the enrollment one."""
+        from functools import partial
+
+        from earshot.identity.embed import embed
         from earshot.identity.verify import verify
 
-        return verify(audio, self.profile)
+        minimum = load_yaml("policy")["voice"]["min_reply_speech_s"]
+        return verify(audio, self.profile, embedder=partial(embed, min_speech_s=minimum))
 
     def score_embedding(self, embedding: Embedding) -> float:
         from earshot.identity.embed import cosine
@@ -219,7 +224,10 @@ class Approver:
             t0 = time.perf_counter()
             reply_result = self.scorer.score_audio(heard) if self.scorer else None
             latency["speaker"] = _ms(t0)
-        ev.publish("reply_captured", text=transcript, timed_out=False)
+        ev.publish(
+            "reply_captured", text=transcript, timed_out=False,
+            speech_seconds=None if reply_result is None else round(reply_result.speech_seconds, 2),
+        )  # fmt: skip
 
         t = self.t or thresholds()
         reply_score = reply_result.score if reply_result else None

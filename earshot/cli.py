@@ -194,17 +194,25 @@ def _narrate(events) -> None:
             console.print(f"  [green]band:[/] {e.data['text']}{where}")
         elif e.type == "phone":
             console.print(f"  [magenta]phone ({e.data['via']}):[/] {e.data['text']}")
+        elif e.type == "reply_captured":
+            if e.data.get("timed_out"):
+                console.print("  [dim]heard nothing (timed out)[/]")
+            else:
+                secs = e.data.get("speech_seconds")
+                length = f" ({secs:.1f} s)" if secs is not None else ""
+                console.print(f"  [dim]heard {e.data['text']!r}{length}[/]")
         elif e.type == "speaker_scored":
-            fused = e.data["fused"]
-            score = "no voice" if fused is None else f"{fused:.2f}"
-            console.print(f"  [dim]voice {score} -> {e.data['band']}[/]")
+            parts = [f"{k} {e.data[k]:.2f}" for k in ("reply", "command", "fused")
+                     if e.data[k] is not None]  # fmt: skip
+            score = ", ".join(parts) if parts else "no voice score"
+            console.print(f"  [dim]voice: {score} -> {e.data['band']}[/]")
 
     events.subscribe(show)
 
 
 def _trace(events) -> None:
     def show(e) -> None:
-        if e.type in ("led", "tts", "spoken", "phone", "speaker_scored"):
+        if e.type in ("led", "tts", "spoken", "phone", "speaker_scored", "reply_captured"):
             return
         ms = f" {e.latency_ms:.0f} ms" if e.latency_ms is not None else ""
         data = {k: v for k, v in e.data.items() if k != "result"}

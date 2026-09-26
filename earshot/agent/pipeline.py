@@ -233,8 +233,12 @@ class LiveMic:
                 return
 
     def listen(self, timeout_s: float) -> np.ndarray | None:
-        """Next speech segment, or None if nobody finishes speaking in timeout_s."""
-        return self._segment(timeout_s)
+        """Next reply, or None if nobody finishes speaking in timeout_s. Replies may
+        pause mid-phrase ("yeah... do it"), so they wait for a longer silence."""
+        from earshot.config import load_yaml
+
+        silence = load_yaml("audio")["vad"]["reply_min_silence_ms"]
+        return self._segment(timeout_s, min_silence_ms=silence)
 
     def next_segment(self) -> np.ndarray:
         segment = None
@@ -242,9 +246,9 @@ class LiveMic:
             segment = self._segment(None)
         return segment
 
-    def _segment(self, timeout_s: float | None) -> np.ndarray | None:
+    def _segment(self, timeout_s: float | None, **vad_kwargs) -> np.ndarray | None:
         self.drain()  # anything queued was heard while we were busy or talking
-        vad = self.vad_factory()
+        vad = self.vad_factory(**vad_kwargs)
         deadline = None if timeout_s is None else time.monotonic() + timeout_s
         while deadline is None or time.monotonic() < deadline:
             try:

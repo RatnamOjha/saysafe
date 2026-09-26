@@ -44,6 +44,7 @@ _UNITS = {
         "fourteen fifteen sixteen seventeen eighteen nineteen".split()
     )
 }
+_SCALES = {"thousand": 1_000, "million": 1_000_000}
 _TENS = {
     w: 10 * i
     for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split(), start=2)
@@ -62,8 +63,8 @@ def words_to_number(words: list[str]) -> int | None:
             current += _TENS[w]
         elif w == "hundred":
             current = max(current, 1) * 100
-        elif w == "thousand":
-            total += max(current, 1) * 1000
+        elif w in _SCALES:
+            total += max(current, 1) * _SCALES[w]
             current = 0
         else:
             return None
@@ -96,6 +97,7 @@ class MockAgent:
         self.clock = clock
         self.fixed_code = fixed_code
         self.user = fake_user()
+        self._awaiting_amount_for: str | None = None  # contact we asked "how much?" about
 
     def current_code(self) -> str:
         """Six-digit code that rotates every 60 s (fixed in demo mode)."""
@@ -105,7 +107,20 @@ class MockAgent:
         digest = hashlib.sha256(f"alex-otp:{window}".encode()).hexdigest()
         return f"{int(digest, 16) % 1_000_000:06d}"
 
+    def _answer_amount(self, text: str) -> Decimal | None:
+        """A bare amount as the answer to "How much should I send?"."""
+        t = text.lower().replace(",", "").strip(" .!?")
+        if m := re.fullmatch(r"\$?(\d+(?:\.\d{1,2})?)\s*(million|thousand)(?: dollars)?", t):
+            return Decimal(m.group(1)) * _SCALES[m.group(2)]  # "5 million": digits then a scale
+        return parse_amount(t) or parse_amount(f"{t} dollars")
+
     def handle(self, text: str) -> Action | Reply:
+        if self._awaiting_amount_for:
+            name, self._awaiting_amount_for = self._awaiting_amount_for, None
+            amount = self._answer_amount(text)
+            if amount is not None:
+                return self.send_money(name, amount)
+
         if env("EARSHOT_AGENT") == "llm":
             result = self._handle_llm(text)
             if result is not None:
@@ -157,6 +172,7 @@ class MockAgent:
         )
         display = contact["name"] if contact else name.capitalize()
         if amount is None:
+            self._awaiting_amount_for = display
             return Reply(text=f"How much should I send to {display}?")
         return Action(
             type="send_money",

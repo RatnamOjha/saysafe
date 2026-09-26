@@ -119,3 +119,20 @@ def test_words_to_number(words, n):
 )  # fmt: skip
 def test_parse_amount(text, amount):
     assert parse_amount(text) == (Decimal(amount) if amount else None)
+
+
+@pytest.mark.parametrize(
+    "answer, amount",
+    [("$50.", "50"), ("fifty", "50"), ("50 dollars", "50"), ("5 million.", "5000000"),
+     ("five million", "5000000")],
+)  # fmt: skip
+def test_follow_up_amount(agent, answer, amount):
+    assert "How much" in agent.handle("send money to Drake").text
+    a = agent.handle(answer)
+    assert a.type == "send_money" and a.counterparty == "Drake" and a.amount == Decimal(amount)
+
+
+def test_follow_up_only_once(agent):
+    agent.handle("send money to Jake")
+    assert isinstance(agent.handle("what's the weather"), Reply)  # not an amount: drop the question
+    assert isinstance(agent.handle("$50"), Reply)

@@ -71,3 +71,10 @@ tokens:
 
 phone:
   pending_ttl_s: 120     # a phone approval request expires after this long
+
+# Who's listening meets who's speaking: a read-back says the amount and the one-time
+# word out loud. For these action types, if the routing table wouldn't speak a
+# `level` reply to the current room, skip voice and approve on the phone instead.
+private_readback:
+  types: [send_money]
+  level: sensitive

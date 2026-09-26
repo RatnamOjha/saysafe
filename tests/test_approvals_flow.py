@@ -419,3 +419,40 @@ def test_routes_approve_deny_404_409(world):
     r2 = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
     assert client.post(f"/approvals/{r2.action.id}/deny").json()["status"] == "denied"
     assert r2.action not in world.pipeline.executor.executed
+
+
+@pytest.mark.parametrize("room", ["others_present", "unknown"])
+def test_money_readback_stays_private_when_others_may_hear(world, room):
+    world.pipeline.audience = FixedAudience(room)
+    r = run(say(world, "yes"), "send fifty dollars to Jake")
+    assert r.decision.outcome == "step_up"
+    spoken = " ".join(world.pipeline.tts.spoken)
+    assert "fifty" not in spoken and "confirm" not in spoken  # no amount, no challenge word
+    assert world.pipeline.tts.spoken == [
+        "Someone else might be listening. Check your phone to approve."
+    ]
+    assert "Jake, fifty dollars." in world.pipeline.phone.sent[-1].text
+    assert world.pending.approve(r.action.id).changed
+    assert r.action in world.pipeline.executor.executed
+
+
+def test_money_readback_spoken_with_headphones(world):
+    world.pipeline.audience = FixedAudience("others_present")
+    world.pipeline.flags["headphones"] = True
+    run(say(world, "yes"), "send fifty dollars to Jake")
+    assert world.pipeline.tts.spoken[0].startswith("Jake, fifty dollars.")
+
+
+def test_food_readback_still_spoken_with_others(world):
+    world.pipeline.audience = FixedAudience("others_present")
+    run(say(world, "yes"), "order my usual")
+    assert world.pipeline.tts.spoken[0] == "DoorDash, forty-three twenty, to home. Say yes."
+
+
+def test_new_payee_readback_is_private_with_others(world):
+    world.pipeline.audience = FixedAudience("others_present")
+    run(world, "send twenty dollars to Priya")
+    assert world.pipeline.tts.spoken == [
+        "Someone else might be listening. Check your phone to approve."
+    ]
+    assert "Priya, twenty dollars." in world.pipeline.phone.sent[-1].text

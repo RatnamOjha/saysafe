@@ -89,11 +89,16 @@ def _instruction(tier: str, challenge_word: str | None) -> str:
     return ""
 
 
-def readback(action: Action, risk: RiskAssessment, challenge_word: str | None = None) -> Readback:
+def summary(action: Action) -> str:
+    """Who, how much, where, anything unusual: the read-back without the instruction."""
     parts = [_SOURCE_PREFIX[action.source]] if action.source in _SOURCE_PREFIX else []
     parts += _body(action)
     body = " ".join(parts)
     words = body.split()
     if len(words) > MAX_BODY_WORDS:  # long names or params: keep the start, it has who and how much
         body = " ".join(words[:MAX_BODY_WORDS]).rstrip(",.") + "."
-    return Readback(body, _instruction(risk.tier, challenge_word))
+    return body
+
+
+def readback(action: Action, risk: RiskAssessment, challenge_word: str | None = None) -> Readback:
+    return Readback(summary(action), _instruction(risk.tier, challenge_word))

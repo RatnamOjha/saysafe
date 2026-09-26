@@ -26,7 +26,7 @@ from earshot.approvals.challenge import ChallengeIssuer
 from earshot.approvals.pending import PendingApprovals
 from earshot.approvals.pending import pending as default_pending
 from earshot.approvals.policy import RiskAssessment, assess
-from earshot.approvals.readback import readback
+from earshot.approvals.readback import readback, summary
 from earshot.approvals.response import Match, match_response
 from earshot.approvals.tokens import TokenService, default_service
 from earshot.config import load_yaml
@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 Outcome = Literal["approve", "step_up", "reject"]
 
 STEP_UP_LINE = "I couldn't confirm it's you. Tap on your phone to approve."
+PRIVATE_LINE = "Someone else might be listening. Check your phone to approve."
 REJECT_LINE = "Okay, I won't."
 
 
@@ -147,14 +148,25 @@ class Approver:
             token = self.tokens.issue(action, risk.tier, method="none", fused_score=None)
             return finish(ApprovalDecision("approve", token, reasons=risk.reasons), "none")
 
+        private_why = self._private_readback_reason(action, ctx)
+
         if risk.tier == "phone_tap":
             rb = readback(action, risk)
-            with ev.step("readback_spoken", text=rb.text, tier=risk.tier):
-                ctx.speak(rb.text)
+            said = PRIVATE_LINE if private_why else rb.text
+            with ev.step("readback_spoken", text=said, tier=risk.tier, private=bool(private_why)):
+                ctx.speak(said)
             self._request_phone(action, risk, ctx, rb.body)
-            return finish(ApprovalDecision("step_up", reasons=risk.reasons), "phone_tap")
+            reasons = [*risk.reasons, *([private_why] if private_why else [])]
+            return finish(ApprovalDecision("step_up", reasons=reasons), "phone_tap")
 
-        # voice or voice_challenge
+        # voice or voice_challenge, unless the room shouldn't hear the details
+        if private_why:
+            ctx.speak(PRIVATE_LINE)
+            ev.publish("readback_spoken", text=PRIVATE_LINE, tier=risk.tier, private=True)
+            self._request_phone(action, risk, ctx, summary(action))
+            return finish(ApprovalDecision("step_up", reasons=[private_why]), "phone_tap",
+                          match="private_readback")  # fmt: skip
+
         challenge = self.issuer.issue(action.id) if risk.tier == "voice_challenge" else None
         rb = readback(action, risk, challenge.word if challenge else None)
         t0 = time.perf_counter()
@@ -232,6 +244,19 @@ class Approver:
         ctx.speak(STEP_UP_LINE)
         self._request_phone(action, risk, ctx, rb.body)
         return finish(ApprovalDecision("step_up", reasons=[why]), "phone_tap", **audit_extra)
+
+    def _private_readback_reason(self, action: Action, ctx: TurnContext) -> str | None:
+        """Why the read-back must not be spoken here, or None if it can be."""
+        from earshot.privacy.hook import audience_state
+        from earshot.privacy.route import table_cell
+
+        cfg = load_yaml("policy").get("private_readback") or {}
+        if action.type not in cfg.get("types", []):
+            return None
+        room = audience_state(ctx)
+        if room.headphones or table_cell(cfg["level"], room.level) == "speak":
+            return None
+        return f"Read-back kept private ({room.level.replace('_', ' ')})"
 
     def _request_phone(
         self, action: Action, risk: RiskAssessment, ctx: TurnContext, summary: str

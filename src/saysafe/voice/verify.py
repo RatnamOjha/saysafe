@@ -3,12 +3,13 @@
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import yaml
 
-from saysafe.config import CONFIG_DIR, load_yaml
+from saysafe.config import load_yaml
 from saysafe.voice.embed import Embedding, TooShort, cosine, embed
 from saysafe.voice.profile_store import Profile
 
@@ -34,14 +35,14 @@ class VerifyResult:
         return self.score is None
 
 
-def thresholds() -> Thresholds:
-    """Calibrated thresholds when eval has produced them, else the placeholders."""
-    calibrated = CONFIG_DIR / "thresholds.calibrated.yaml"
-    if calibrated.exists():
-        data = yaml.safe_load(calibrated.read_text())
-        return Thresholds(data["t_accept"], data["t_reject"], calibrated.name)
+def thresholds(path: str | Path | None = None) -> Thresholds:
+    """Thresholds from a YAML file with t_accept and t_reject (e.g. your own calibration),
+    or the packaged placeholders. Calibrate on your own mic and users before relying on them."""
+    if path is not None:
+        data = yaml.safe_load(Path(path).read_text())
+        return Thresholds(data["t_accept"], data["t_reject"], Path(path).name)
     data = load_yaml("thresholds")
-    return Thresholds(data["t_accept"], data["t_reject"], "thresholds.yaml")
+    return Thresholds(data["t_accept"], data["t_reject"], "default")
 
 
 def band(score: float, t: Thresholds) -> Band:

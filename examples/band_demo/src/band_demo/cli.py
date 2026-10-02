@@ -107,11 +107,12 @@ def say(text: str, volume: float = typer.Option(1.0, min=0.0, max=1.0)) -> None:
 def enroll(name: str = typer.Option(..., "--name")) -> None:
     """Guided voice enrollment: 8 short clips."""
     from band_demo.audio import capture
+    from band_demo.config import profile_store
     from saysafe.voice.enroll import run_enrollment
-    from saysafe.voice.profile_store import ProfileError, ProfileStore
+    from saysafe.voice.profile_store import ProfileError
 
     try:
-        store = ProfileStore()
+        store = profile_store()
     except ProfileError as e:
         _fail(str(e))
     mic = capture.input_device_name()
@@ -141,15 +142,17 @@ def verify(
     from rich.table import Table
 
     from band_demo.audio import capture
+    from band_demo.config import profile_store
+    from band_demo.config import thresholds as demo_thresholds
     from saysafe.voice import io
     from saysafe.voice import verify as v
-    from saysafe.voice.profile_store import ProfileError, ProfileStore
+    from saysafe.voice.profile_store import ProfileError
 
     try:
-        profile = ProfileStore().load(name)
+        profile = profile_store().load(name)
     except ProfileError as e:
         _fail(str(e))
-    t = v.thresholds()
+    t = demo_thresholds()
     if not live and not file:
         _fail("Use --live or --file.")
     _load_voice_models()
@@ -332,8 +335,8 @@ def live(
     from band_demo.agent.events import bus
     from band_demo.agent.pipeline import LiveMic, Pipeline
     from band_demo.audio.capture import MicStream, input_device_name
+    from band_demo.config import env
     from band_demo.server.app import serve_in_background
-    from saysafe.config import env
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     console.print(f"Loading models... (mic: [bold]{input_device_name()}[/])")
@@ -455,9 +458,9 @@ def demo(
 
     import uvicorn
 
+    from band_demo.config import env
     from band_demo.server.app import create_app
     from band_demo.server.demo import DemoSession
-    from saysafe.config import env
 
     os.environ.setdefault("EARSHOT_DEMO", "1")
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -493,7 +496,7 @@ def preflight(
 
     import httpx
 
-    from saysafe.config import env
+    from band_demo.config import env
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     results: list[tuple[bool, str, str]] = []
@@ -517,10 +520,10 @@ def preflight(
 
     def profile():
         from band_demo.audio.capture import input_device_name
-        from saysafe.voice.profile_store import ProfileStore
+        from band_demo.config import profile_store
 
         owner = name or env("EARSHOT_OWNER", "owner")
-        p = ProfileStore().load(owner)
+        p = profile_store().load(owner)
         age = datetime.now(timezone.utc) - p.created_at
         fresh = age < timedelta(days=3)
         same_mic = p.mic_name == input_device_name()

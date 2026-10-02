@@ -4,7 +4,7 @@ from cryptography.fernet import Fernet
 
 from saysafe.voice import enroll
 from saysafe.voice.embed import Embedding, TooShort, cosine, normalize
-from saysafe.voice.profile_store import Profile, ProfileError, ProfileStore
+from saysafe.voice.profile_store import Profile, ProfileError, ProfileStore, keyring_key
 from saysafe.voice.verify import Thresholds, band, verify
 
 T = Thresholds(t_accept=0.45, t_reject=0.25, source="test")
@@ -40,7 +40,7 @@ def test_profile_roundtrip(tmp_path):
 
 def test_wrong_key_gives_clear_error(tmp_path):
     ProfileStore(tmp_path, Fernet.generate_key()).save(_profile())
-    with pytest.raises(ProfileError, match="wrong EARSHOT_PROFILE_KEY"):
+    with pytest.raises(ProfileError, match="wrong key"):
         ProfileStore(tmp_path, Fernet.generate_key()).load("alex")
 
 
@@ -156,5 +156,5 @@ def test_missing_keychain_is_a_clear_profile_error(tmp_path, monkeypatch):
     monkeypatch.delenv("EARSHOT_PROFILE_KEY", raising=False)
     monkeypatch.setattr(keyring, "get_keyring", lambda: NoKeyring())
     monkeypatch.setattr(keyring.core, "_keyring_backend", NoKeyring())
-    with pytest.raises(ProfileError, match="EARSHOT_PROFILE_KEY"):
-        ProfileStore(tmp_path)
+    with pytest.raises(ProfileError, match="Pass a key explicitly"):
+        keyring_key()

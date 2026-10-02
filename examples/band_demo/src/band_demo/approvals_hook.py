@@ -20,18 +20,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
+from band_demo import config as demo_config
 from band_demo.owner import VoiceScorer, load_owner_scorer
 from saysafe.approvals.actions import Action, action_hash
 from saysafe.approvals.audit import AuditLog
 from saysafe.approvals.challenge import ChallengeIssuer
 from saysafe.approvals.pending import PendingApprovals
-from saysafe.approvals.pending import pending as default_pending
 from saysafe.approvals.policy import RiskAssessment, assess
 from saysafe.approvals.readback import readback, summary
 from saysafe.approvals.response import Match, match_response
-from saysafe.approvals.tokens import TokenService, default_service
+from saysafe.approvals.tokens import TokenService
 from saysafe.config import load_yaml
-from saysafe.voice.verify import Thresholds, VerifyResult, thresholds
+from saysafe.voice.verify import Thresholds, VerifyResult
 
 if TYPE_CHECKING:
     from band_demo.agent.pipeline import TurnContext
@@ -91,16 +91,16 @@ class Approver:
         self._stt = stt
         self._scorer = scorer
         self._tokens = tokens
-        self.pending = pending or default_pending
+        self.pending = pending or demo_config.pending()
         self.clock = clock
         self.issuer = issuer or ChallengeIssuer(clock=clock)
-        self.audit = audit or AuditLog()
+        self.audit = audit or demo_config.audit_log()
         self.t = t
         self.cfg = load_yaml("policy")["voice"]
 
     @property
     def tokens(self) -> TokenService:
-        return self._tokens or default_service()
+        return self._tokens or demo_config.token_service()
 
     @property
     def stt(self) -> STT:
@@ -205,7 +205,7 @@ class Approver:
             speech_seconds=None if reply_result is None else round(reply_result.speech_seconds, 2),
         )  # fmt: skip
 
-        t = self.t or thresholds()
+        t = self.t or demo_config.thresholds()
         reply_score = reply_result.score if reply_result else None
         command_score = (
             self.scorer.score_embedding(ctx.command_embedding)

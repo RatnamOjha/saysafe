@@ -11,19 +11,15 @@ import base64
 import hashlib
 import hmac
 import json
-import logging
 import secrets
 import sqlite3
 import threading
 import time
 from collections.abc import Callable
-from functools import lru_cache
 from pathlib import Path
 
 from saysafe.approvals.actions import Action, action_hash
-from saysafe.config import ROOT, env, load_yaml
-
-log = logging.getLogger(__name__)
+from saysafe.config import load_yaml
 
 
 class Refused(Exception):
@@ -36,10 +32,6 @@ class Refused(Exception):
         super().__init__(reason)
 
 
-def data_dir() -> Path:
-    return Path(env("EARSHOT_DATA_DIR", str(ROOT / "data"))).expanduser()
-
-
 def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -49,27 +41,28 @@ def _unb64(text: str) -> bytes:
 
 
 class TokenService:
+    """Issues and verifies approval tokens.
+
+    secret:  at least 32 random bytes, kept server-side (e.g. secrets.token_bytes(32)).
+             Tokens signed with one secret never verify under another.
+    db_path: where used nonces are recorded. The default, ":memory:", forgets them when
+             the process exits; pass a file path so replays stay blocked across restarts.
+    """
+
     def __init__(
         self,
-        secret: bytes | None = None,
-        db_path: Path | str | None = None,
+        secret: bytes,
+        db_path: Path | str = ":memory:",
         clock: Callable[[], float] = time.time,
         ttl_s: float | None = None,
     ):
-        if secret is None:
-            configured = env("EARSHOT_SECRET")
-            if configured:
-                secret = configured.encode()
-            else:
-                # Fail closed: tokens from a random secret die with this process.
-                log.warning("tokens: EARSHOT_SECRET not set, using a per-process secret")
-                secret = secrets.token_bytes(32)
+        if not isinstance(secret, bytes) or len(secret) < 16:
+            raise ValueError("secret must be at least 16 random bytes (32 recommended)")
         self._secret = secret
         self.clock = clock
         self.ttl_s = ttl_s if ttl_s is not None else load_yaml("policy")["tokens"]["ttl_s"]
-        if db_path is None:
-            data_dir().mkdir(parents=True, exist_ok=True)
-            db_path = data_dir() / "nonces.sqlite"
+        if db_path != ":memory:":
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(str(db_path), check_same_thread=False, isolation_level=None)
         self._db.execute("CREATE TABLE IF NOT EXISTS used (nonce TEXT PRIMARY KEY, at REAL)")
         self._lock = threading.Lock()
@@ -113,13 +106,3 @@ class TokenService:
             except sqlite3.IntegrityError:
                 raise Refused("replayed") from None
         return payload
-
-
-@lru_cache
-def default_service() -> TokenService:
-    """One service per process, shared by the approvals hook and the executor."""
-    return TokenService()
-
-
-def verify_token(token: str, action: Action) -> None:
-    default_service().verify(token, action)

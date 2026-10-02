@@ -12,12 +12,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 
-from saysafe.config import CONFIG_DIR, load_yaml
+from saysafe.config import data_text, load_yaml
 
 
 @lru_cache
 def words() -> tuple[str, ...]:
-    lines = (CONFIG_DIR / "challenge_words.txt").read_text().splitlines()
+    lines = data_text("challenge_words.txt").splitlines()
     return tuple(w.strip().lower() for w in lines if w.strip() and not w.startswith("#"))
 
 

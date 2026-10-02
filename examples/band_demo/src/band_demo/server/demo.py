@@ -22,8 +22,8 @@ from band_demo.agent.channels import PhoneChannel
 from band_demo.agent.events import EventBus, bus
 from band_demo.agent.mock_agent import MockAgent
 from band_demo.agent.pipeline import LiveMic, Pipeline
+from band_demo.config import env
 from band_demo.owner import owner_score_fn
-from saysafe.config import env
 from saysafe.privacy.audience import AudienceTracker
 from saysafe.voice.vad import StreamingVAD
 
@@ -128,9 +128,9 @@ class DemoSession:
     def snapshot(self) -> dict:
         from dataclasses import asdict
 
-        from saysafe.voice.verify import thresholds
+        from band_demo.config import thresholds as demo_thresholds
 
-        t = thresholds()
+        t = demo_thresholds()
         return {
             "type": "hello",
             "demo": self.demo,

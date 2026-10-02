@@ -24,7 +24,7 @@ def events():
 
 
 def _approve_all(action, ctx):
-    from saysafe.approvals.tokens import default_service
+    from band_demo.config import token_service as default_service
 
     return ApprovalDecision("approve", default_service().issue(action, "test", "test", None))
 
@@ -58,7 +58,7 @@ def test_executor_requires_token():
     a = MockAgent().order_usual()
     with pytest.raises(MissingApproval):
         Executor().run(a, None)
-    from saysafe.approvals.tokens import default_service
+    from band_demo.config import token_service as default_service
 
     token = default_service().issue(a, "voice", "voice", 0.9)
     assert "Order placed" in Executor().run(a, token).text

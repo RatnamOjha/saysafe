@@ -11,7 +11,7 @@ import httpx
 
 from band_demo.agent.events import EventBus, bus
 from band_demo.audio.tts import TTS
-from saysafe.config import env
+from band_demo.config import env
 
 log = logging.getLogger(__name__)
 

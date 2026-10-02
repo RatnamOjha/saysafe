@@ -27,7 +27,7 @@ class Segment:
 
 
 def _cfg() -> dict:
-    return load_yaml("audio")["vad"]
+    return load_yaml("voice")["vad"]
 
 
 @lru_cache

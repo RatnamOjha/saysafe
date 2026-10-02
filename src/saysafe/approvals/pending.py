@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from saysafe.approvals.actions import Action
-from saysafe.approvals.tokens import TokenService, default_service
+from saysafe.approvals.tokens import TokenService
 from saysafe.config import load_yaml
 
 Status = Literal["pending", "approved", "denied", "expired"]
@@ -39,7 +39,7 @@ class PendingApproval:
 class PendingApprovals:
     def __init__(
         self,
-        tokens: TokenService | None = None,
+        tokens: TokenService,
         clock: Callable[[], float] = time.time,
         ttl_s: float | None = None,
     ):
@@ -51,7 +51,7 @@ class PendingApprovals:
 
     @property
     def tokens(self) -> TokenService:
-        return self._tokens or default_service()
+        return self._tokens
 
     def add(
         self,
@@ -91,6 +91,3 @@ class PendingApprovals:
             p.status = "denied"
         p.on_denied(p.action)
         return Resolution("denied", changed=True)
-
-
-pending = PendingApprovals()

@@ -7,7 +7,7 @@ EARSHOT_REWRITE_LLM=1  smooths redacted replies with an LLM
 from pydantic import BaseModel
 
 from band_demo import llm
-from saysafe.config import env
+from band_demo.config import env
 from saysafe.privacy.detect import CLASSIFIER_PROMPT, Classifier, Level, Verdict
 from saysafe.privacy.rewrite import Smoother, smoother_prompt
 

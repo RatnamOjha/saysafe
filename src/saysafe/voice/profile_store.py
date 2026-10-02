@@ -1,7 +1,7 @@
-"""Fernet-encrypted profile storage in EARSHOT_PROFILES_DIR.
+"""Fernet-encrypted voice profiles in a directory you choose.
 
-The key comes from EARSHOT_PROFILE_KEY, or is generated once and kept in the OS
-keyring (macOS Keychain). Embeddings are never printed: they're excluded from repr.
+Pass the key explicitly, or use keyring_key() to keep one in the OS keychain.
+Embeddings are never printed: they're excluded from repr.
 """
 
 import re
@@ -12,10 +12,6 @@ import numpy as np
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, Field
 
-from saysafe.config import ROOT, env
-
-_KEYRING_SERVICE = "earshot"
-_KEYRING_USER = "profile_key"
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 
 
@@ -39,37 +35,32 @@ class Profile(BaseModel):
         return repr(self)
 
 
-def default_dir() -> Path:
-    return Path(env("EARSHOT_PROFILES_DIR", str(ROOT / "profiles"))).expanduser()
-
-
-def resolve_key() -> bytes:
-    """EARSHOT_PROFILE_KEY, else the keyring, else a new key saved to the keyring."""
-    key = env("EARSHOT_PROFILE_KEY")
-    if key:
-        return key.encode()
+def keyring_key(service: str = "saysafe", user: str = "profile_key") -> bytes:
+    """A Fernet key kept in the OS keychain (macOS Keychain, Windows Credential Locker,
+    Secret Service on Linux), created on first use. Raises ProfileError with no keychain."""
     import keyring
     from keyring.errors import KeyringError
 
     try:
-        key = keyring.get_password(_KEYRING_SERVICE, _KEYRING_USER)
+        key = keyring.get_password(service, user)
         if not key:
             key = Fernet.generate_key().decode()
-            keyring.set_password(_KEYRING_SERVICE, _KEYRING_USER, key)
+            keyring.set_password(service, user, key)
     except KeyringError as e:  # e.g. a Linux server with no keychain
         raise ProfileError(
-            f"No OS keychain available ({type(e).__name__}). Set EARSHOT_PROFILE_KEY instead."
+            f"No OS keychain available ({type(e).__name__}). Pass a key explicitly instead."
         ) from None
     return key.encode()
 
 
 class ProfileStore:
-    def __init__(self, directory: Path | None = None, key: bytes | None = None):
-        self.dir = Path(directory) if directory else default_dir()
+    def __init__(self, directory: Path | str, key: bytes):
+        """Profiles are Fernet-encrypted with `key` (Fernet.generate_key(), or keyring_key())."""
+        self.dir = Path(directory)
         try:
-            self._fernet = Fernet(key or resolve_key())
+            self._fernet = Fernet(key)
         except ValueError as e:
-            raise ProfileError("EARSHOT_PROFILE_KEY isn't a valid Fernet key.") from e
+            raise ProfileError("The profile key isn't a valid Fernet key.") from e
 
     def _path(self, name: str) -> Path:
         if not _NAME.match(name):
@@ -86,12 +77,12 @@ class ProfileStore:
     def load(self, name: str) -> Profile:
         path = self._path(name)
         if not path.exists():
-            raise ProfileError(f"No profile named {name!r} in {self.dir}. Run: earshot enroll")
+            raise ProfileError(f"No profile named {name!r} in {self.dir}. Enroll first.")
         try:
             data = self._fernet.decrypt(path.read_bytes())
         except InvalidToken:
             raise ProfileError(
-                f"Can't decrypt profile {name!r}: wrong EARSHOT_PROFILE_KEY or a corrupted file."
+                f"Can't decrypt profile {name!r}: wrong key or a corrupted file."
             ) from None
         return Profile.model_validate_json(data)
 

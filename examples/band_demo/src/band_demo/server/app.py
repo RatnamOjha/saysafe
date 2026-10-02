@@ -17,9 +17,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from band_demo import config as demo_config
 from band_demo.agent.events import Event
 from saysafe.approvals.pending import PendingApprovals
-from saysafe.approvals.pending import pending as default_pending
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -44,7 +44,7 @@ class MicIn(BaseModel):
 
 def create_app(pending: PendingApprovals | None = None, session=None) -> FastAPI:
     """Approval routes always; the demo page and controls when a DemoSession is given."""
-    pending = pending or default_pending
+    pending = pending or demo_config.pending()
     sockets: set[WebSocket] = set()
     loop_holder: dict = {}
 

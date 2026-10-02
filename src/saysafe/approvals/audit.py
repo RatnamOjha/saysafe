@@ -9,8 +9,6 @@ import threading
 import time
 from pathlib import Path
 
-from saysafe.approvals.tokens import data_dir
-
 ALLOWED = {
     "time", "action_id", "action_hash", "type", "source", "tier", "rule_id", "reasons",
     "scores", "speech_seconds", "match", "outcome", "method", "latency_ms",
@@ -18,8 +16,8 @@ ALLOWED = {
 
 
 class AuditLog:
-    def __init__(self, path: Path | None = None):
-        self.path = Path(path) if path else data_dir() / "audit.jsonl"
+    def __init__(self, path: Path | str):
+        self.path = Path(path)
         self._lock = threading.Lock()
 
     def record(self, **fields) -> dict:

@@ -18,3 +18,24 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -m "not models"
+
+  core-only:
+    # The core must install and work without torch or any model, on the oldest Python we support.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python 3.10 .core
+      - run: uv pip install --python .core/bin/python .
+      - run: |
+          .core/bin/python - <<'PY'
+          import importlib.util
+          assert importlib.util.find_spec("torch") is None, "core pulled in torch"
+          from saysafe.privacy.audience import FixedAudience
+          from saysafe.privacy.detect import detect
+          from saysafe.privacy.route import route
+          t = "Your Chase verification code is 482913."
+          r = route(t, detect(t, {"otp"}), FixedAudience("others_present").state())
+          assert r.channel == "phone_only" and "482913" not in r.spoken_text
+          print("core ok:", r.channel)
+          PY

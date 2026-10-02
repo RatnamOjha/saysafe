@@ -17,8 +17,7 @@ from datetime import datetime, timezone
 
 import yaml
 from _common import DATA, LATEST, REPORTS, ROOT
-
-from saysafe.config import env
+from band_demo.config import env
 
 PY = [sys.executable]
 

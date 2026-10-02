@@ -4,10 +4,11 @@ import logging
 import time
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 
-from saysafe.config import cache_dir, load_yaml
+from saysafe.config import load_yaml
 from saysafe.voice import vad
 from saysafe.voice.io import SR
 
@@ -28,23 +29,31 @@ class Embedding:
         return f"Embedding(speech_seconds={self.speech_seconds:.2f})"
 
 
+MODEL_SOURCE = "speechbrain/spkrec-ecapa-voxceleb"
+DEFAULT_MODEL_DIR = Path.home() / ".cache" / "saysafe" / "ecapa"
+
+
 @lru_cache
-def _encoder():
+def _encoder(model_dir: Path = DEFAULT_MODEL_DIR):
+    """ECAPA from model_dir; downloaded from Hugging Face on first use (~80 MB)."""
     from speechbrain.inference.speaker import EncoderClassifier
 
-    path = cache_dir() / "ecapa"
-    if not (path / "embedding_model.ckpt").exists():
-        raise FileNotFoundError(f"ECAPA model not found in {path}. Run: make models")
+    model_dir = Path(model_dir)
+    local = (model_dir / "embedding_model.ckpt").exists()
     logging.disable(logging.INFO)  # speechbrain logs "Fetch ..." chatter at INFO while loading
     try:
         return EncoderClassifier.from_hparams(
-            source=str(path), savedir=str(path), run_opts={"device": "cpu"}
+            source=str(model_dir) if local else MODEL_SOURCE,
+            savedir=str(model_dir),
+            run_opts={"device": "cpu"},
         )
     finally:
         logging.disable(logging.NOTSET)
 
 
-def embed(audio: np.ndarray, min_speech_s: float | None = None) -> Embedding:
+def embed(
+    audio: np.ndarray, min_speech_s: float | None = None, model_dir: Path = DEFAULT_MODEL_DIR
+) -> Embedding:
     """VAD first, then embed only the speech. Raises TooShort under min_speech_s
     (default: enroll.min_speech_s from config/audio.yaml)."""
     import torch
@@ -53,12 +62,12 @@ def embed(audio: np.ndarray, min_speech_s: float | None = None) -> Embedding:
     speech = vad.speech_only(audio)
     speech_seconds = len(speech) / SR
     minimum = (
-        min_speech_s if min_speech_s is not None else load_yaml("audio")["enroll"]["min_speech_s"]
+        min_speech_s if min_speech_s is not None else load_yaml("voice")["enroll"]["min_speech_s"]
     )
     if speech_seconds < minimum:
         raise TooShort(speech_seconds, minimum)
     with torch.inference_mode():
-        out = _encoder().encode_batch(torch.from_numpy(speech).unsqueeze(0))
+        out = _encoder(Path(model_dir)).encode_batch(torch.from_numpy(speech).unsqueeze(0))
     vector = normalize(out.squeeze().numpy().astype(np.float32))
     return Embedding(vector, speech_seconds, (time.perf_counter() - start) * 1000)
 

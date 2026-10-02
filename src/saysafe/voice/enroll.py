@@ -68,7 +68,7 @@ def run_enrollment(
 
     `ready(prompt)` is called before each recording (the CLI waits for Enter there).
     """
-    cfg = load_yaml("audio")["enroll"]
+    cfg = load_yaml("voice")["enroll"]
 
     def capture(i: int) -> Clip:
         prompt = PROMPTS[i]

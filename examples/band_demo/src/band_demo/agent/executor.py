@@ -9,8 +9,9 @@ from decimal import Decimal
 from num2words import num2words
 
 from band_demo.agent.mock_agent import Reply
+from band_demo.config import verify_token
 from saysafe.approvals.actions import Action
-from saysafe.approvals.tokens import Refused, verify_token
+from saysafe.approvals.tokens import Refused
 
 
 class MissingApproval(Exception):

@@ -29,24 +29,25 @@ def isolated(tmp_path, monkeypatch):
     """Keep tests away from real state: audit log, nonce DB, voice profiles, keychain."""
     from cryptography.fernet import Fernet
 
-    from saysafe.approvals import tokens
-
     monkeypatch.setenv("EARSHOT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("EARSHOT_PROFILES_DIR", str(tmp_path / "profiles"))
     monkeypatch.setenv("EARSHOT_OWNER", "nobody")
-    monkeypatch.setenv("EARSHOT_SECRET", "test-secret")
+    monkeypatch.setenv("EARSHOT_SECRET", "test-secret-test-secret-test-secret")
     monkeypatch.setenv("EARSHOT_PROFILE_KEY", Fernet.generate_key().decode())  # never the keychain
     monkeypatch.delenv("NTFY_TOPIC", raising=False)
     monkeypatch.delenv("EARSHOT_DETECT_LLM", raising=False)
     monkeypatch.delenv("EARSHOT_REWRITE_LLM", raising=False)
-    tokens.default_service.cache_clear()
     if HAS_DEMO:
-        from band_demo import approvals_hook
+        from band_demo import approvals_hook, config
 
+        config.token_service.cache_clear()
+        config.pending.cache_clear()
         monkeypatch.setattr(approvals_hook, "_approver", None)
     _drop_unloadable_lazy_modules()
     yield
-    tokens.default_service.cache_clear()
+    if HAS_DEMO:
+        config.token_service.cache_clear()
+        config.pending.cache_clear()
 
 
 @pytest.fixture(scope="session")

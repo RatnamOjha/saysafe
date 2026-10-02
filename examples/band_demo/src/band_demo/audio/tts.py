@@ -6,7 +6,7 @@ from typing import Protocol
 
 import numpy as np
 
-from saysafe.config import cache_dir, env, load_yaml
+from band_demo.config import cache_dir, demo_config, env
 from saysafe.voice.io import SR, resample
 
 
@@ -19,7 +19,7 @@ class PiperTTS:
     def __init__(self, voice: str | None = None):
         from piper import PiperVoice
 
-        voice = voice or load_yaml("audio")["tts"]["piper_voice"]
+        voice = voice or demo_config()["tts"]["piper_voice"]
         matches = sorted((cache_dir() / "piper").rglob(f"{voice}.onnx"))
         if not matches:
             raise FileNotFoundError(f"Piper voice {voice} not found. Run: make models")

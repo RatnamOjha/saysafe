@@ -34,8 +34,9 @@ from pathlib import Path
 import numpy as np
 import yaml
 from _common import LATEST, LIBRISPEECH, NOISE, VOICES, read_manifest
+from band_demo.config import CONFIG_DIR
 
-from saysafe.config import CONFIG_DIR, load_yaml
+from saysafe.config import load_yaml
 from saysafe.voice.embed import TooShort, cosine, embed, normalize
 from saysafe.voice.io import SR, load_audio
 from saysafe.voice.verify import Thresholds
@@ -366,6 +367,7 @@ def main() -> int:
     target = CONFIG_DIR if "EARSHOT_EVAL_DATA" not in os.environ else LATEST
     LATEST.mkdir(parents=True, exist_ok=True)
     if not args.no_write_thresholds:
+        target.mkdir(parents=True, exist_ok=True)
         (target / "thresholds.calibrated.yaml").write_text(
             "# Written by eval/speaker_eval.py. Do not edit by hand; rerun make eval.\n"
             + yaml.safe_dump(

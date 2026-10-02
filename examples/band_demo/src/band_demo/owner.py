@@ -6,9 +6,9 @@ from functools import partial
 
 import numpy as np
 
-from saysafe.config import env
+from band_demo.config import env, profile_store
 from saysafe.voice.embed import Embedding, cosine, embed
-from saysafe.voice.profile_store import Profile, ProfileError, ProfileStore
+from saysafe.voice.profile_store import Profile, ProfileError
 from saysafe.voice.verify import VerifyResult, verify
 
 log = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def load_owner_scorer() -> VoiceScorer | None:
     """The enrolled owner's scorer, or None if EARSHOT_OWNER has no usable profile."""
     name = env("EARSHOT_OWNER", "owner")
     try:
-        return VoiceScorer(ProfileStore().load(name))
+        return VoiceScorer(profile_store().load(name))
     except ProfileError as e:
         log.warning("no usable owner profile (%s)", e)
         return None

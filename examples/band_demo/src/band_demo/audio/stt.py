@@ -14,7 +14,7 @@ from typing import Literal, Protocol
 import numpy as np
 import soundfile as sf
 
-from saysafe.config import cache_dir, env, load_yaml
+from band_demo.config import cache_dir, demo_config, env
 from saysafe.voice.io import SR
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class LocalWhisperSTT:
     def __init__(self, model: str):
         from faster_whisper import WhisperModel
 
-        cfg = load_yaml("audio")["stt"]
+        cfg = demo_config()["stt"]
         local = cache_dir() / "whisper" / model
         self.name = model
         self.beam_size = cfg["beam_size"]
@@ -78,7 +78,7 @@ class GroqWhisperSTT:
     """whisper-large-v3-turbo on the same OpenAI-compatible endpoint as the LLM."""
 
     def __init__(self, fallback: STT):
-        self.name = load_yaml("audio")["stt"]["groq_model"]
+        self.name = demo_config()["stt"]["groq_model"]
         self._fallback = fallback
 
     def transcribe(self, audio: np.ndarray) -> Transcript:
@@ -112,7 +112,7 @@ class GroqWhisperSTT:
 @lru_cache
 def get_stt(purpose: Purpose = "command") -> STT:
     """Commands use the larger model; short approval replies use the faster one."""
-    cfg = load_yaml("audio")["stt"]
+    cfg = demo_config()["stt"]
     local = LocalWhisperSTT(cfg[f"{purpose}_model"])
     if env("EARSHOT_STT") == "groq" and env("LLM_API_KEY"):
         return GroqWhisperSTT(fallback=local)

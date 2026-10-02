@@ -1,0 +1,10 @@
+# Demo-only audio settings.
+stt:
+  command_model: small.en  # commands: more accurate
+  reply_model: base.en     # short approval replies: faster
+  compute_type: int8
+  beam_size: 1
+  groq_model: whisper-large-v3-turbo
+
+tts:
+  piper_voice: en_US-lessac-medium

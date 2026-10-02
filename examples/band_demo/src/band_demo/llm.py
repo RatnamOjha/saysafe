@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
-from saysafe.config import env
+from band_demo.config import env
 
 log = logging.getLogger(__name__)
 

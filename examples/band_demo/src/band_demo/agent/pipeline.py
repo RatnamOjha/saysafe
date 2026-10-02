@@ -257,7 +257,7 @@ class LiveMic:
         pause mid-phrase ("yeah... do it"), so they wait for a longer silence."""
         from saysafe.config import load_yaml
 
-        silence = load_yaml("audio")["vad"]["reply_min_silence_ms"]
+        silence = load_yaml("voice")["vad"]["reply_min_silence_ms"]
         return self._segment(timeout_s, min_silence_ms=silence)
 
     def next_segment(self) -> np.ndarray:

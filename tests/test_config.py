@@ -1,4 +1,4 @@
-from earshot import config
+from saysafe import config
 
 
 def test_empty_env_counts_as_unset(monkeypatch):

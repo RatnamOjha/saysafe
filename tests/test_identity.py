@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 from cryptography.fernet import Fernet
 
-from earshot.identity import enroll
-from earshot.identity.embed import Embedding, TooShort, cosine, normalize
-from earshot.identity.profile_store import Profile, ProfileError, ProfileStore
-from earshot.identity.verify import Thresholds, band, verify
+from saysafe.identity import enroll
+from saysafe.identity.embed import Embedding, TooShort, cosine, normalize
+from saysafe.identity.profile_store import Profile, ProfileError, ProfileStore
+from saysafe.identity.verify import Thresholds, band, verify
 
 T = Thresholds(t_accept=0.45, t_reject=0.25, source="test")
 
@@ -129,7 +129,7 @@ def test_run_enrollment_rerecords_short_and_outlier_clips():
 
 @pytest.mark.models
 def test_embed_real_speech(piper_speech):
-    from earshot.identity.embed import embed
+    from saysafe.identity.embed import embed
 
     e = embed(piper_speech)
     assert e.vector.shape == (192,) and abs(np.linalg.norm(e.vector) - 1) < 1e-4
@@ -140,8 +140,8 @@ def test_embed_real_speech(piper_speech):
 
 @pytest.mark.models
 def test_short_reply_embeds_with_lower_minimum():
-    from earshot.audio.tts import PiperTTS
-    from earshot.identity.embed import embed
+    from saysafe.audio.tts import PiperTTS
+    from saysafe.identity.embed import embed
 
     word = PiperTTS().synthesize("tunnel")  # ~0.4 s of speech
     with pytest.raises(TooShort):
@@ -153,7 +153,7 @@ def test_missing_keychain_is_a_clear_profile_error(tmp_path, monkeypatch):
     import keyring
     from keyring.backends.fail import Keyring as NoKeyring
 
-    from earshot.identity.owner import load_owner_scorer
+    from saysafe.identity.owner import load_owner_scorer
 
     monkeypatch.delenv("EARSHOT_PROFILE_KEY", raising=False)
     monkeypatch.setattr(keyring, "get_keyring", lambda: NoKeyring())

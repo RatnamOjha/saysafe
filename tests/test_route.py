@@ -2,15 +2,15 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from earshot.agent.channels import PhoneChannel
-from earshot.agent.events import EventBus
-from earshot.agent.mock_agent import MockAgent, Reply
-from earshot.agent.pipeline import Pipeline
-from earshot.audio.tts import NullTTS
-from earshot.privacy.audience import AudienceState, FixedAudience
-from earshot.privacy.detect import detect
-from earshot.privacy.rewrite import FALLBACK
-from earshot.privacy.route import PHONE_ONLY_LINE, route
+from saysafe.agent.channels import PhoneChannel
+from saysafe.agent.events import EventBus
+from saysafe.agent.mock_agent import MockAgent, Reply
+from saysafe.agent.pipeline import Pipeline
+from saysafe.audio.tts import NullTTS
+from saysafe.privacy.audience import AudienceState, FixedAudience
+from saysafe.privacy.detect import detect
+from saysafe.privacy.rewrite import FALLBACK
+from saysafe.privacy.route import PHONE_ONLY_LINE, route
 
 
 @pytest.fixture(autouse=True)
@@ -109,7 +109,7 @@ def test_rewrites(text, spoken):
 
 
 def test_rewrite_that_still_leaks_falls_back(monkeypatch):
-    from earshot.privacy import rewrite as rw
+    from saysafe.privacy import rewrite as rw
 
     monkeypatch.setenv("EARSHOT_REWRITE_LLM", "1")
     monkeypatch.setattr(rw, "llm_smooth", lambda text, forbidden: "Your balance is $2,847.16.")

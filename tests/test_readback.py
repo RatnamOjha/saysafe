@@ -2,9 +2,9 @@ from decimal import Decimal
 
 import pytest
 
-from earshot.approvals.policy import assess
-from earshot.approvals.readback import MAX_BODY_WORDS, money_words, readback
-from earshot.cli import demo_actions
+from saysafe.approvals.policy import assess
+from saysafe.approvals.readback import MAX_BODY_WORDS, money_words, readback
+from saysafe.cli import demo_actions
 
 
 @pytest.mark.parametrize(

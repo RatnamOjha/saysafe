@@ -3,11 +3,11 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from earshot.agent.channels import PhoneChannel
-from earshot.agent.events import EventBus
-from earshot.audio.tts import NullTTS
-from earshot.server.app import create_app
-from earshot.server.demo import DEMO_CODE, DemoSession
+from saysafe.agent.channels import PhoneChannel
+from saysafe.agent.events import EventBus
+from saysafe.audio.tts import NullTTS
+from saysafe.server.app import create_app
+from saysafe.server.demo import DEMO_CODE, DemoSession
 
 
 @pytest.fixture

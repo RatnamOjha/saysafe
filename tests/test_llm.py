@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel
 
-from earshot import llm
+from saysafe import llm
 
 
 class Level(BaseModel):

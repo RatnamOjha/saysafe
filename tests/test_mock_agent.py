@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from earshot.agent.mock_agent import MockAgent, Reply, parse_amount, words_to_number
-from earshot.approvals.actions import Action
+from saysafe.agent.mock_agent import MockAgent, Reply, parse_amount, words_to_number
+from saysafe.approvals.actions import Action
 
 
 @pytest.fixture

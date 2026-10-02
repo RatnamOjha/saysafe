@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from earshot.audio import io
+from saysafe.audio import io
 from tests.conftest import sine
 
 

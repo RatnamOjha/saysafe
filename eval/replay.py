@@ -19,8 +19,8 @@ import numpy as np
 from _common import VOICES, read_manifest, write_manifest
 from collect import describe
 
-from earshot.audio import capture
-from earshot.audio.io import SR, load_audio, save_wav
+from saysafe.audio import capture
+from saysafe.audio.io import SR, load_audio, save_wav
 
 
 def main() -> None:

@@ -4,16 +4,16 @@ import httpx
 import numpy as np
 import pytest
 
-from earshot.agent.channels import PhoneChannel, SpeakerChannel
-from earshot.agent.events import EventBus
-from earshot.agent.executor import Executor, MissingApproval, Refused
-from earshot.agent.mock_agent import MockAgent
-from earshot.agent.pipeline import Pipeline
-from earshot.approvals import hook as approvals_hook
-from earshot.approvals.hook import ApprovalDecision
-from earshot.audio.tts import NullTTS
-from earshot.identity.embed import Embedding, TooShort
-from earshot.privacy import hook as privacy_hook
+from saysafe.agent.channels import PhoneChannel, SpeakerChannel
+from saysafe.agent.events import EventBus
+from saysafe.agent.executor import Executor, MissingApproval, Refused
+from saysafe.agent.mock_agent import MockAgent
+from saysafe.agent.pipeline import Pipeline
+from saysafe.approvals import hook as approvals_hook
+from saysafe.approvals.hook import ApprovalDecision
+from saysafe.audio.tts import NullTTS
+from saysafe.identity.embed import Embedding, TooShort
+from saysafe.privacy import hook as privacy_hook
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def events():
 
 
 def _approve_all(action, ctx):
-    from earshot.approvals.tokens import default_service
+    from saysafe.approvals.tokens import default_service
 
     return ApprovalDecision("approve", default_service().issue(action, "test", "test", None))
 
@@ -59,7 +59,7 @@ def test_executor_requires_token():
     a = MockAgent().order_usual()
     with pytest.raises(MissingApproval):
         Executor().run(a, None)
-    from earshot.approvals.tokens import default_service
+    from saysafe.approvals.tokens import default_service
 
     token = default_service().issue(a, "voice", "voice", 0.9)
     assert "Order placed" in Executor().run(a, token).text
@@ -142,7 +142,7 @@ def test_order_usual_says_order_placed(pipeline, events):
 
 
 def test_code_is_spoken_when_alone(pipeline):
-    from earshot.privacy.audience import FixedAudience
+    from saysafe.privacy.audience import FixedAudience
 
     pipeline.audience = FixedAudience("alone_likely")
     pipeline.run_text("what's my verification code")
@@ -195,7 +195,7 @@ class FakeSTT:
         self.text = text
 
     def transcribe(self, audio):
-        from earshot.audio.stt import Transcript
+        from saysafe.audio.stt import Transcript
 
         return Transcript(self.text, [], 1.0, "fake")
 
@@ -243,8 +243,8 @@ def test_spoken_chatter_is_ignored_but_typed_gets_an_answer(pipeline, events):
 def test_live_mic_reports_every_segment_to_the_observer():
     import queue as q
 
-    from earshot.agent.pipeline import LiveMic
-    from earshot.audio.vad import FRAME, StreamingVAD
+    from saysafe.agent.pipeline import LiveMic
+    from saysafe.audio.vad import FRAME, StreamingVAD
 
     class FakeStream:
         def __init__(self, frames):

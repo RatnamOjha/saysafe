@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from earshot.approvals.actions import Action
-from earshot.approvals.policy import assess, bump
+from saysafe.approvals.actions import Action
+from saysafe.approvals.policy import assess, bump
 
 
 def A(type, amount=None, new=False, source="user_voice", **kw) -> Action:

@@ -29,7 +29,7 @@ def _drop_unloadable_lazy_modules() -> None:
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     """Keep tests away from real state: audit log, nonce DB, voice profiles."""
-    from earshot.approvals import hook, tokens
+    from saysafe.approvals import hook, tokens
 
     monkeypatch.setenv("EARSHOT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("EARSHOT_PROFILES_DIR", str(tmp_path / "profiles"))
@@ -51,6 +51,6 @@ def isolated(tmp_path, monkeypatch):
 @pytest.fixture(scope="session")
 def piper_speech() -> np.ndarray:
     """Real synthesized speech (16 kHz) for VAD/STT/embedding tests. Needs models."""
-    from earshot.audio.tts import PiperTTS
+    from saysafe.audio.tts import PiperTTS
 
     return PiperTTS().synthesize(FIXTURE_TEXT)

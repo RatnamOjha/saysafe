@@ -28,17 +28,17 @@ import tempfile
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import yaml
 from _common import LATEST, LIBRISPEECH, NOISE, VOICES, read_manifest
 
-from earshot.audio.io import SR, load_audio
-from earshot.config import CONFIG_DIR, load_yaml
-from earshot.identity.embed import TooShort, cosine, embed, normalize
-from earshot.identity.verify import Thresholds
+from saysafe.audio.io import SR, load_audio
+from saysafe.config import CONFIG_DIR, load_yaml
+from saysafe.identity.embed import TooShort, cosine, embed, normalize
+from saysafe.identity.verify import Thresholds
 
 SEED = 13
 MIN_SPEECH = None  # set from config (the reply minimum) in main
@@ -192,7 +192,7 @@ class _Scorer:
         self.mean = mean
 
     def score_audio(self, audio, min_speech_s=None):
-        from earshot.identity.verify import verify
+        from saysafe.identity.verify import verify
 
         profile = type("P", (), {"mean": self.mean})()
         from functools import partial
@@ -207,7 +207,7 @@ class _ForcedIssuer:
     """Issues a chosen word, so a recorded clip can be the 'right' or an 'old' word."""
 
     def __init__(self, clock):
-        from earshot.approvals.challenge import ChallengeIssuer
+        from saysafe.approvals.challenge import ChallengeIssuer
 
         self._inner = ChallengeIssuer(clock=clock)
         self.word = "zebra"
@@ -228,7 +228,7 @@ class _TextSTT:
         self.real, self.forced = real, forced
 
     def transcribe(self, audio):
-        from earshot.audio.stt import Transcript
+        from saysafe.audio.stt import Transcript
 
         return (
             Transcript(self.forced, [], 0.0, "forced")
@@ -241,16 +241,16 @@ def run_attempts(
     attempts: list[dict], profile_mean: np.ndarray, t: Thresholds
 ) -> tuple[list, list]:
     """Each attempt: {group, condition, tier, reply: Clip, command: Clip|None, word, forced_text}."""
-    from earshot.agent.channels import PhoneChannel
-    from earshot.agent.events import EventBus
-    from earshot.agent.mock_agent import MockAgent
-    from earshot.approvals.audit import AuditLog
-    from earshot.approvals.hook import Approver
-    from earshot.approvals.pending import PendingApprovals
-    from earshot.approvals.tokens import TokenService
-    from earshot.audio.stt import get_stt
-    from earshot.identity.embed import Embedding
-    from earshot.privacy.audience import FixedAudience
+    from saysafe.agent.channels import PhoneChannel
+    from saysafe.agent.events import EventBus
+    from saysafe.agent.mock_agent import MockAgent
+    from saysafe.approvals.audit import AuditLog
+    from saysafe.approvals.hook import Approver
+    from saysafe.approvals.pending import PendingApprovals
+    from saysafe.approvals.tokens import TokenService
+    from saysafe.audio.stt import get_stt
+    from saysafe.identity.embed import Embedding
+    from saysafe.privacy.audience import FixedAudience
 
     tmp = Path(tempfile.mkdtemp())
     clock = time.time
@@ -371,7 +371,7 @@ def main() -> int:
                 {
                     "t_accept": t.t_accept,
                     "t_reject": t.t_reject,
-                    "date": datetime.now(UTC).strftime("%Y-%m-%d"),
+                    "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     "n_dev_owner_clips": cal["n_dev_owner"],
                     "n_impostor_clips": cal["n_impostor"],
                     "n_librispeech_speakers": cal["n_librispeech_speakers"],
@@ -477,7 +477,7 @@ def main() -> int:
 
     # latency
     lat_embed, lat_stt = [], []
-    from earshot.audio.stt import get_stt
+    from saysafe.audio.stt import get_stt
 
     reply_stt = get_stt("reply")
     for c in [c for c in test if c.condition == "close"][:30]:
@@ -497,7 +497,7 @@ def main() -> int:
                 "p95": round(float(np.percentile(xs, 95)), 1), "n": len(xs)} if xs else None  # fmt: skip
 
     report = {
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "people": {
             "owner": 1,
             "friends": len({c.pid for c in clips if c.group == "friend"}),

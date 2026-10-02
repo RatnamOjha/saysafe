@@ -23,7 +23,7 @@ import yaml
 from _common import DATA
 from pydantic import BaseModel
 
-from earshot import llm
+from saysafe import llm
 
 OUT = DATA / "replies.yaml"
 Level = Literal["public", "personal", "sensitive", "secret"]

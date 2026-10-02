@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from earshot.privacy.detect import detect, luhn_ok
+from saysafe.privacy.detect import detect, luhn_ok
 
 CASES = yaml.safe_load((Path(__file__).parent / "data" / "sensitivity_cases.yaml").read_text())
 
@@ -40,7 +40,7 @@ def test_luhn():
 
 
 def test_llm_failure_with_nothing_else_is_personal(monkeypatch):
-    from earshot import llm
+    from saysafe import llm
 
     monkeypatch.setenv("EARSHOT_DETECT_LLM", "1")
     monkeypatch.setattr(llm, "complete", lambda *a, **k: None)
@@ -52,8 +52,8 @@ def test_llm_failure_with_nothing_else_is_personal(monkeypatch):
 def test_llm_adds_spans(monkeypatch):
     from types import SimpleNamespace
 
-    from earshot import llm
-    from earshot.privacy import detect as d
+    from saysafe import llm
+    from saysafe.privacy import detect as d
 
     def fake(messages, model, timeout_s, json_schema):
         parsed = json_schema(level="sensitive", categories=["health"],

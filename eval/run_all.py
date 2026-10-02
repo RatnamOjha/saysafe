@@ -13,12 +13,12 @@ import argparse
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import yaml
 from _common import DATA, LATEST, REPORTS, ROOT
 
-from earshot.config import env
+from saysafe.config import env
 
 PY = [sys.executable]
 
@@ -109,7 +109,7 @@ def build(speaker: dict, routing: dict | None) -> tuple[dict, str]:
     weak.append(f"Small sample: {who}, one room, one mic.")
 
     results = {
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "people": people,
         "thresholds": {k: speaker["calibration"][k] for k in ("t_accept", "t_reject")},
         "headlines": headlines,

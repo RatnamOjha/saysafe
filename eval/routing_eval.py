@@ -15,16 +15,16 @@ import os
 import sys
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import yaml
 from _common import DATA, REPORTS
 
-from earshot.privacy.audience import AudienceState
-from earshot.privacy.detect import detect, rank
-from earshot.privacy.route import route
+from saysafe.privacy.audience import AudienceState
+from saysafe.privacy.detect import detect, rank
+from saysafe.privacy.route import route
 
 PATH = DATA / "replies.yaml"
 AUDIENCES = ("alone_likely", "unknown", "others_present")
@@ -220,7 +220,7 @@ def main() -> int:
         print("rules + LLM (paced for the free tier's rate limit)...", flush=True)
         modes.append(evaluate(use, True, args.pace))
     report = {
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "dry_run": args.unreviewed,
         "n_reviewed": len(use),
         "n_injection": sum(bool(i.get("injection")) for i in use),

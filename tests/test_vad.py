@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from earshot.audio import vad
-from earshot.audio.vad import FRAME, StreamingVAD
+from saysafe.audio import vad
+from saysafe.audio.vad import FRAME, StreamingVAD
 
 
 def test_silence_has_no_segments():

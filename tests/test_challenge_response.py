@@ -4,8 +4,8 @@ import jellyfish
 import pytest
 from rapidfuzz.distance import Levenshtein
 
-from earshot.approvals.challenge import Challenge, ChallengeIssuer, words
-from earshot.approvals.response import match_response
+from saysafe.approvals.challenge import Challenge, ChallengeIssuer, words
+from saysafe.approvals.response import match_response
 
 NOW = 1000.0
 

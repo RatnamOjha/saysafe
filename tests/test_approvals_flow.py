@@ -6,23 +6,23 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from earshot.agent.channels import PhoneChannel
-from earshot.agent.events import EventBus
-from earshot.agent.executor import Executor, Refused
-from earshot.agent.mock_agent import MockAgent
-from earshot.agent.pipeline import Pipeline
-from earshot.approvals import hook as approvals_hook
-from earshot.approvals.audit import AuditLog
-from earshot.approvals.challenge import ChallengeIssuer
-from earshot.approvals.hook import Approver, fuse
-from earshot.approvals.pending import PendingApprovals
-from earshot.approvals.tokens import TokenService
-from earshot.audio.stt import Transcript
-from earshot.audio.tts import NullTTS
-from earshot.identity.embed import Embedding
-from earshot.identity.verify import Thresholds, VerifyResult, band
-from earshot.privacy.audience import FixedAudience
-from earshot.server.app import create_app
+from saysafe.agent.channels import PhoneChannel
+from saysafe.agent.events import EventBus
+from saysafe.agent.executor import Executor, Refused
+from saysafe.agent.mock_agent import MockAgent
+from saysafe.agent.pipeline import Pipeline
+from saysafe.approvals import hook as approvals_hook
+from saysafe.approvals.audit import AuditLog
+from saysafe.approvals.challenge import ChallengeIssuer
+from saysafe.approvals.hook import Approver, fuse
+from saysafe.approvals.pending import PendingApprovals
+from saysafe.approvals.tokens import TokenService
+from saysafe.audio.stt import Transcript
+from saysafe.audio.tts import NullTTS
+from saysafe.identity.embed import Embedding
+from saysafe.identity.verify import Thresholds, VerifyResult, band
+from saysafe.privacy.audience import FixedAudience
+from saysafe.server.app import create_app
 
 T = Thresholds(0.45, 0.25, "test")
 WEIGHTS = {"reply_weight": 0.6, "command_weight": 0.4}

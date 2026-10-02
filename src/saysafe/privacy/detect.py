@@ -7,14 +7,12 @@ rewriter can redact them and the UI can highlight them.
 
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel
-
-from saysafe import llm
-from saysafe.config import env, load_yaml
+from saysafe.config import load_yaml
 
 Level = Literal["public", "personal", "sensitive", "secret"]
 LEVELS: list[Level] = ["public", "personal", "sensitive", "secret"]
@@ -196,21 +194,23 @@ def _dedupe(spans: list[Span]) -> list[Span]:
     return kept
 
 
-# layer c: optional LLM ----------------------------------------------------------------
+# layer c: optional classifier (e.g. an LLM) ------------------------------------------
 
 
-class _LLMSpan(BaseModel):
-    text: str
-    category: str
+@dataclass(frozen=True)
+class Verdict:
+    """What an optional classifier says about a reply. Spans are exact substrings."""
 
-
-class _LLMDetection(BaseModel):
     level: Level
-    categories: list[str] = []
-    spans: list[_LLMSpan] = []
+    categories: list[str] = field(default_factory=list)
+    spans: list[tuple[str, str]] = field(default_factory=list)  # (substring, category)
 
 
-_LLM_PROMPT = (
+# Called with the reply text; returns a Verdict, or None if it failed or timed out.
+Classifier = Callable[[str], "Verdict | None"]
+
+# A prompt that works well for the classifier; ask for JSON shaped like Verdict.
+CLASSIFIER_PROMPT = (
     "Classify how sensitive this assistant reply is to say out loud with strangers nearby.\n"
     "secret: one-time codes, passwords, PINs, full card or account numbers, SSNs.\n"
     "sensitive: the user's money (balances, what they owe, salary, bills), health, home "
@@ -221,29 +221,26 @@ _LLM_PROMPT = (
 )
 
 
-def llm_spans(text: str) -> tuple[Level, list[str], list[Span]] | None:
-    cfg = load_yaml("sensitivity")["llm"]
-    result = llm.complete(
-        [{"role": "system", "content": _LLM_PROMPT}, {"role": "user", "content": text}],
-        model="fast",
-        timeout_s=cfg["timeout_s"],
-        json_schema=_LLMDetection,
-    )
-    if result is None:
-        return None
-    d: _LLMDetection = result.parsed
+def _verdict_spans(text: str, verdict: Verdict) -> list[Span]:
     spans = []
-    for s in d.spans:
-        i = text.find(s.text)
-        if s.text and i >= 0:
-            spans.append(Span(i, i + len(s.text), s.category, "llm", s.text))
-    return d.level, d.categories, spans
+    for sub, category in verdict.spans:
+        i = text.find(sub)
+        if sub and i >= 0:
+            spans.append(Span(i, i + len(sub), category, "llm", sub))
+    return spans
 
 
 # detect -----------------------------------------------------------------------------
 
 
-def detect(text: str, source_tags: set[str] | frozenset[str] = frozenset()) -> Detection:
+def detect(
+    text: str,
+    source_tags: set[str] | frozenset[str] = frozenset(),
+    classifier: Classifier | None = None,
+) -> Detection:
+    """How sensitive `text` is. `source_tags` are hints from where the data came from
+    (otp, bank, health, email, calendar). `classifier` is an optional extra layer, e.g.
+    an LLM; if it fails and no other layer fired, the result is personal, never public."""
     cfg = load_yaml("sensitivity")
     latency: dict[str, float] = {}
 
@@ -269,9 +266,9 @@ def detect(text: str, source_tags: set[str] | frozenset[str] = frozenset()) -> D
 
     categories = sorted({s.category for s in spans} | {t for t in source_tags if t != "public"})
 
-    if env("EARSHOT_DETECT_LLM") == "1":
+    if classifier is not None:
         t0 = time.perf_counter()
-        got = llm_spans(text)
+        got = classifier(text)
         latency["llm"] = _ms(t0)
         if got is None:
             nothing_fired = not spans and (hint is None or hint == "public")
@@ -279,9 +276,9 @@ def detect(text: str, source_tags: set[str] | frozenset[str] = frozenset()) -> D
                 level = highest(level, cfg["llm"]["fallback_level"])
                 categories.append("llm_unavailable")
         else:
-            llm_level, llm_categories, extra = got
-            level = highest(level, llm_level)
-            categories = sorted(set(categories) | set(llm_categories))
+            level = highest(level, got.level)
+            categories = sorted(set(categories) | set(got.categories))
+            extra = _verdict_spans(text, got)
             spans = _dedupe(spans + [s for s in extra if not _overlaps(s, spans)])
 
     return Detection(level, categories, spans, latency, hint)

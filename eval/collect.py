@@ -18,10 +18,11 @@ import sys
 
 import numpy as np
 from _common import VOICES, read_manifest, write_manifest
+from band_demo.audio import capture
 
-from saysafe.audio import capture, vad
-from saysafe.audio.io import SR, rms_dbfs, save_wav
 from saysafe.config import CONFIG_DIR
+from saysafe.voice import vad
+from saysafe.voice.io import SR, rms_dbfs, save_wav
 
 CONSENT = (
     "This records about 30 short clips of your voice to test a voice-approval prototype.\n"

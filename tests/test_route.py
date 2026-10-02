@@ -2,21 +2,10 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from saysafe.agent.channels import PhoneChannel
-from saysafe.agent.events import EventBus
-from saysafe.agent.mock_agent import MockAgent, Reply
-from saysafe.agent.pipeline import Pipeline
-from saysafe.audio.tts import NullTTS
-from saysafe.privacy.audience import AudienceState, FixedAudience
+from saysafe.privacy.audience import AudienceState
 from saysafe.privacy.detect import detect
 from saysafe.privacy.rewrite import FALLBACK
 from saysafe.privacy.route import PHONE_ONLY_LINE, route
-
-
-@pytest.fixture(autouse=True)
-def rules_only(monkeypatch):
-    monkeypatch.delenv("EARSHOT_DETECT_LLM", raising=False)
-    monkeypatch.delenv("EARSHOT_REWRITE_LLM", raising=False)
 
 
 def room(level, headphones=False, discreet=False) -> AudienceState:
@@ -108,14 +97,18 @@ def test_rewrites(text, spoken):
     assert route(text, detect(text), room("others_present")).spoken_text == spoken
 
 
-def test_rewrite_that_still_leaks_falls_back(monkeypatch):
-    from saysafe.privacy import rewrite as rw
-
-    monkeypatch.setenv("EARSHOT_REWRITE_LLM", "1")
-    monkeypatch.setattr(rw, "llm_smooth", lambda text, forbidden: "Your balance is $2,847.16.")
+def test_smoother_that_still_leaks_falls_back():
+    leaky = lambda text, forbidden: "Your balance is $2,847.16."  # noqa: E731
     text, tags = EXAMPLES["sensitive"]
-    r = route(text, detect(text, tags), room("others_present"))
+    r = route(text, detect(text, tags), room("others_present"), smoother=leaky)
     assert r.spoken_text == FALLBACK and r.rewrite_step == "fallback"
+
+
+def test_smoother_output_is_used_when_safe():
+    smooth = lambda text, forbidden: "Your balance is ready on your phone."  # noqa: E731
+    text, tags = EXAMPLES["sensitive"]
+    r = route(text, detect(text, tags), room("others_present"), smoother=smooth)
+    assert r.spoken_text == "Your balance is ready on your phone." and r.rewrite_step == "llm"
 
 
 def test_injection_email_routes_like_a_plain_one():
@@ -177,49 +170,3 @@ def test_no_flagged_span_reaches_spoken_text(case):
         if d.level in ("sensitive", "secret"):
             for value in secrets_in_text:
                 assert value not in spoken, (text, spoken)
-
-
-# through the pipeline
-
-
-def test_pipeline_code_alone_vs_friend():
-    events = EventBus()
-    log = []
-    events.subscribe(log.append)
-
-    def run(level):
-        p = Pipeline(
-            tts=NullTTS(), agent=MockAgent(fixed_code="482913"), events=events,
-            phone=PhoneChannel(events, console_only=True), audience=FixedAudience(level),
-        )  # fmt: skip
-        p.run_text("what's my verification code")
-        return p
-
-    alone = run("alone_likely")
-    assert alone.tts.spoken == ["Your Chase verification code is 482913."]
-    friend = run("others_present")
-    assert friend.tts.spoken == [PHONE_ONLY_LINE]
-    assert "482913" in friend.phone.sent[-1].text
-    types = {e.type for e in log}
-    assert {"detection", "audience_state", "route_decision"} <= types
-
-
-def test_pipeline_flags_reach_the_router():
-    p = Pipeline(
-        tts=NullTTS(), agent=MockAgent(fixed_code="482913"),
-        phone=PhoneChannel(console_only=True), audience=FixedAudience("others_present"),
-    )  # fmt: skip
-    p.flags["headphones"] = True
-    r = p.run_text("what's my verification code")
-    assert r.speak.channel == "headphones_full"
-    assert p.headphones.sent[-1].text == "Your Chase verification code is 482913."
-
-
-def test_reply_with_no_audience_tracker_is_cautious():
-    p = Pipeline(tts=NullTTS(), agent=MockAgent(fixed_code="482913"),
-                 phone=PhoneChannel(console_only=True))  # fmt: skip
-    assert p.run_text("what's my verification code").speak.channel == "phone_only"
-
-
-def test_reply_model_default_is_public():
-    assert Reply(text="hi").source_tags == {"public"}

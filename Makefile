@@ -22,10 +22,10 @@ format:
 	uv run ruff format .
 
 demo:
-	EARSHOT_DEMO=1 uv run earshot demo
+	EARSHOT_DEMO=1 uv run band-demo demo
 
 preflight:
-	uv run earshot preflight
+	uv run band-demo preflight
 
 eval:
 	uv run python eval/run_all.py

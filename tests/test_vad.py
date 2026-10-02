@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from saysafe.audio import vad
-from saysafe.audio.vad import FRAME, StreamingVAD
+from saysafe.voice import vad
+from saysafe.voice.vad import FRAME, StreamingVAD
 
 
 def test_silence_has_no_segments():

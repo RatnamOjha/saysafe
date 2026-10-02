@@ -17,7 +17,7 @@ from typing import Literal
 from saysafe.config import load_yaml
 from saysafe.privacy.audience import AudienceState
 from saysafe.privacy.detect import Detection, Level, rank
-from saysafe.privacy.rewrite import rewrite
+from saysafe.privacy.rewrite import Smoother, rewrite
 
 Channel = Literal["speak_full", "headphones_full", "speak_redacted_and_phone", "phone_only"]
 VoiceStyle = Literal["normal", "whisper"]
@@ -52,6 +52,7 @@ def route(
     detection: Detection,
     audience: AudienceState,
     voice_style: VoiceStyle = "normal",
+    smoother: Smoother | None = None,
 ) -> SpeakDecision:
     volume = WHISPER_VOLUME if voice_style == "whisper" else 1.0
     level = detection.level
@@ -67,7 +68,9 @@ def route(
             return SpeakDecision("speak_full", text, None, volume, [why, "Nothing private"],
                                  "discreet:public")  # fmt: skip
         # nothing personal or above is spoken, so only public rewrites pass
-        return _redacted(text, detection, volume, [why], "discreet", lambda lv: lv == "public")
+        return _redacted(
+            text, detection, volume, [why], "discreet", lambda lv: lv == "public", smoother
+        )
 
     cell = table_cell(level, audience.level)
     rule_cell = f"{level} x {audience.level}"
@@ -81,11 +84,11 @@ def route(
     def speakable(lv: Level) -> bool:
         return table_cell(lv, audience.level) == "speak"
 
-    return _redacted(text, detection, volume, reasons, rule_cell, speakable)
+    return _redacted(text, detection, volume, reasons, rule_cell, speakable, smoother)
 
 
-def _redacted(text, detection, volume, reasons, rule_cell, speakable) -> SpeakDecision:
-    r = rewrite(text, detection, speakable)
+def _redacted(text, detection, volume, reasons, rule_cell, speakable, smoother) -> SpeakDecision:
+    r = rewrite(text, detection, speakable, smoother)
     return SpeakDecision(
         "speak_redacted_and_phone", r.text, text, volume, [*reasons, *r.reasons], rule_cell,
         rewrite_step=r.step,

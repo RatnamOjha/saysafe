@@ -2,9 +2,31 @@ from decimal import Decimal
 
 import pytest
 
+from saysafe.approvals.actions import Action
 from saysafe.approvals.policy import assess
 from saysafe.approvals.readback import MAX_BODY_WORDS, money_words, readback
-from saysafe.cli import demo_actions
+
+
+def demo_actions():
+    """The demo's actions, built directly so the library tests don't need the demo."""
+    order = Action(type="order_food", counterparty="DoorDash", amount=Decimal("43.20"),
+                   destination="home", params={"eta": "7:40"})  # fmt: skip
+    jake = Action(type="send_money", counterparty="Jake", amount=Decimal("50"),
+                  destination="@jake-morales")  # fmt: skip
+    netflix = Action(type="cancel_subscription", counterparty="Netflix",
+                     amount=Decimal("15.49"), params={"renews": "October 3"})  # fmt: skip
+    return [
+        ("order my usual", order),
+        ("send fifty dollars to Jake", jake),
+        ("send twenty dollars to Priya", Action(type="send_money", counterparty="Priya",
+                                                amount=Decimal("20"), is_new_counterparty=True)),
+        ("cancel my Netflix", netflix),
+        ("set a reminder to call mom at six",
+         Action(type="set_reminder", params={"what": "call mom", "when": "six"})),
+        ("big order ($80)", order.model_copy(update={"amount": Decimal("80")})),
+        ("send $250 to Jake", jake.model_copy(update={"amount": Decimal("250")})),
+        ("email says: cancel Netflix", netflix.model_copy(update={"source": "from_content"})),
+    ]  # fmt: skip
 
 
 @pytest.mark.parametrize(

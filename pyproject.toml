@@ -1,44 +1,51 @@
 [project]
 name = "saysafe"
 version = "0.1.0"
-description = "Voice-locked approvals and private replies for a screenless AI wearable."
+description = "Privacy and approval guardrails for voice agents: who's speaking, and who's listening."
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
+authors = [{ name = "Ratnam Ojha" }]
+keywords = ["voice", "voice-agent", "privacy", "speaker-verification", "guardrails", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Security",
+]
+# The core (privacy filter, approvals, tokens) has no models and no network.
 dependencies = [
-    "fastapi",
-    "uvicorn[standard]",
     "pydantic>=2",
     "pyyaml",
-    "python-dotenv",
-    "numpy",
-    "soundfile",
-    "sounddevice",
-    "torch",
-    "torchaudio",
-    "speechbrain",
-    "faster-whisper",
-    "silero-vad",
-    "piper-tts",
-    "openai",
-    "httpx",
-    "cryptography",
-    "keyring",
     "num2words",
     "rapidfuzz",
     "jellyfish",
-    "librosa",
-    "scikit-learn",
-    "scipy",
-    "matplotlib",
-    "rich",
-    "typer",
 ]
 
-[project.scripts]
-earshot = "saysafe.cli:app"
+[project.optional-dependencies]
+# Voice ID: speaker embeddings, enrollment, verification, VAD.
+voice = [
+    "numpy",
+    "scipy",
+    "soundfile",
+    "torch",
+    "torchaudio",
+    "speechbrain",
+    "silero-vad",
+    "cryptography",
+    "keyring",
+]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "hypothesis"]
+dev = ["pytest", "ruff", "hypothesis", "band-demo", "matplotlib"]
+
+[tool.uv.workspace]
+members = ["examples/band_demo"]
 
 [build-system]
 requires = ["hatchling"]
@@ -50,6 +57,8 @@ packages = ["src/saysafe"]
 # CPU-only torch. macOS wheels on PyPI are already CPU builds; on Linux (CI)
 # pull from the PyTorch CPU index so we don't download CUDA.
 [tool.uv.sources]
+band-demo = { workspace = true }
+saysafe = { workspace = true }
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 torchaudio = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
@@ -59,7 +68,9 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "examples/band_demo/tests"]
+addopts = "--import-mode=importlib"
+pythonpath = ["."]
 markers = ["models: needs downloaded models (run with -m models)"]
 
 [tool.ruff]
@@ -73,4 +84,5 @@ select = ["E", "F", "I", "UP", "B"]
 extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
 [tool.ruff.lint.per-file-ignores]
-"eval/*" = ["E501"]  # dense report/dict code; readability over wrapping
+"eval/*" = ["E501"]
+"examples/band_demo/src/band_demo/cli.py" = ["E501"]  # dense report/dict code; readability over wrapping

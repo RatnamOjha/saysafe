@@ -21,9 +21,8 @@ from typing import Literal
 
 import yaml
 from _common import DATA
+from band_demo import llm
 from pydantic import BaseModel
-
-from saysafe import llm
 
 OUT = DATA / "replies.yaml"
 Level = Literal["public", "personal", "sensitive", "secret"]

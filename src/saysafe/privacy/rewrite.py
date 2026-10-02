@@ -3,7 +3,7 @@
 1. Span rewrite: each flagged span becomes a placeholder ("your code", "the amount",
    "the address"); after "is" it becomes "on your phone". Health words are dropped,
    and "with Dr. X" becomes "appointment".
-2. Optional LLM smoothing (EARSHOT_REWRITE_LLM=1), told which spans must not appear.
+2. Optional smoothing (e.g. an LLM, via `smoother=`), told which spans must not appear.
 3. Check: run the detector on the result. If it's still too sensitive for this
    audience, any original span text survived, or the grammar broke, fall back to
    "Got it. I sent the details to your phone."
@@ -13,10 +13,6 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
-from saysafe import llm
-from saysafe.config import env
 from saysafe.privacy.detect import Detection, Level, Span, detect
 
 FALLBACK = "Got it. I sent the details to your phone."
@@ -94,35 +90,24 @@ def with_details(text: str) -> str:
     return f"{text.rstrip()} {DETAILS}"
 
 
-class _Smoothed(BaseModel):
-    text: str
+# Called with (redacted text, substrings that must not appear); returns smoother text or None.
+Smoother = Callable[[str, list[str]], "str | None"]
 
 
-def llm_smooth(redacted: str, forbidden: list[str]) -> str | None:
-    result = llm.complete(
-        [
-            {
-                "role": "system",
-                "content": (
-                    "Rewrite this assistant reply so it sounds natural when spoken, keeping "
-                    "its meaning. It has been redacted; the full details are on the user's "
-                    "phone. Never include any of these strings or their values: "
-                    f"{forbidden}. Keep it under 20 words."
-                ),
-            },
-            {"role": "user", "content": redacted},
-        ],
-        model="fast",
-        timeout_s=1.0,
-        json_schema=_Smoothed,
+def smoother_prompt(forbidden: list[str]) -> str:
+    """A system prompt that works well for an LLM smoother."""
+    return (
+        "Rewrite this assistant reply so it sounds natural when spoken, keeping its meaning. "
+        "It has been redacted; the full details are on the user's phone. Never include any "
+        f"of these strings or their values: {forbidden}. Keep it under 20 words."
     )
-    return result.parsed.text if result else None
 
 
 def rewrite(
     text: str,
     detection: Detection,
     speakable: Callable[[Level], bool],
+    smoother: Smoother | None = None,
 ) -> Rewrite:
     """speakable(level) says whether a reply of that level may be spoken to this audience."""
     reasons: list[str] = []
@@ -134,8 +119,8 @@ def rewrite(
     if redacted == _UNFIXABLE:
         return Rewrite(FALLBACK, "fallback", ["Couldn't redact without breaking the sentence"])
     candidate, step = with_details(redacted), "span"
-    if env("EARSHOT_REWRITE_LLM") == "1":
-        smoothed = llm_smooth(candidate, forbidden)
+    if smoother is not None:
+        smoothed = smoother(candidate, forbidden)
         if smoothed:
             candidate, step = smoothed, "llm"
         else:

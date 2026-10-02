@@ -11,7 +11,6 @@ where the agent tags data where it's fetched.
 
 import argparse
 import json
-import os
 import sys
 import time
 from collections import defaultdict
@@ -21,6 +20,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 from _common import DATA, REPORTS
+from band_demo import privacy_llm
 
 from saysafe.privacy.audience import AudienceState
 from saysafe.privacy.detect import detect, rank
@@ -44,10 +44,7 @@ def rate(k: int, n: int) -> dict:
 
 
 def evaluate(items: list[dict], use_llm: bool, pace_s: float) -> dict:
-    if use_llm:
-        os.environ["EARSHOT_DETECT_LLM"] = "1"
-    else:
-        os.environ.pop("EARSHOT_DETECT_LLM", None)
+    classifier = privacy_llm.classify if use_llm else None
 
     plain = [i for i in items if not i.get("injection")]
     inj = [i for i in items if i.get("injection")]
@@ -60,7 +57,7 @@ def evaluate(items: list[dict], use_llm: bool, pace_s: float) -> dict:
     def run_detect(text: str):
         nonlocal llm_failures
         t0 = time.perf_counter()
-        d = detect(text)
+        d = detect(text, classifier=classifier)
         latencies.append((time.perf_counter() - t0) * 1000)
         if use_llm:
             if "llm_unavailable" in d.categories or "llm" not in d.latency_ms:

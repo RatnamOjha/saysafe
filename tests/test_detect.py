@@ -3,14 +3,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from saysafe.privacy.detect import detect, luhn_ok
+from saysafe.privacy.detect import Verdict, detect, luhn_ok
 
 CASES = yaml.safe_load((Path(__file__).parent / "data" / "sensitivity_cases.yaml").read_text())
-
-
-@pytest.fixture(autouse=True)
-def rules_only(monkeypatch):
-    monkeypatch.delenv("EARSHOT_DETECT_LLM", raising=False)
 
 
 def test_there_are_enough_cases():
@@ -39,28 +34,22 @@ def test_luhn():
     assert not luhn_ok("1234")
 
 
-def test_llm_failure_with_nothing_else_is_personal(monkeypatch):
-    from saysafe import llm
-
-    monkeypatch.setenv("EARSHOT_DETECT_LLM", "1")
-    monkeypatch.setattr(llm, "complete", lambda *a, **k: None)
-    assert detect("The meeting moved.").level == "personal"
-    assert detect("It's sunny.", {"public"}).level == "personal"
-    assert detect("Your code is 1234.").level == "secret"  # regex fired, no fallback needed
+def test_classifier_failure_with_nothing_else_is_personal():
+    failing = lambda text: None  # noqa: E731
+    assert detect("The meeting moved.", classifier=failing).level == "personal"
+    assert detect("It's sunny.", {"public"}, classifier=failing).level == "personal"
+    assert detect("Your code is 1234.", classifier=failing).level == "secret"  # regex fired
 
 
-def test_llm_adds_spans(monkeypatch):
-    from types import SimpleNamespace
+def test_classifier_adds_level_and_spans():
+    def classifier(text):
+        return Verdict("sensitive", ["health"], [("the lump", "health"), ("not in text", "x")])
 
-    from saysafe import llm
-    from saysafe.privacy import detect as d
-
-    def fake(messages, model, timeout_s, json_schema):
-        parsed = json_schema(level="sensitive", categories=["health"],
-                             spans=[{"text": "the rash", "category": "health"}])  # fmt: skip
-        return SimpleNamespace(parsed=parsed)
-
-    monkeypatch.setenv("EARSHOT_DETECT_LLM", "1")
-    monkeypatch.setattr(llm, "complete", fake)
-    got = d.detect("Ask about the rash on Monday.")
+    assert detect("Ask the nurse about the lump on Monday.").level == "public"  # rules miss it
+    got = detect("Ask the nurse about the lump on Monday.", classifier=classifier)
     assert got.level == "sensitive" and "llm" in got.latency_ms
+    assert [(s.text, s.source) for s in got.spans] == [("the lump", "llm")]
+
+
+def test_no_classifier_means_no_llm_layer():
+    assert "llm" not in detect("Ask about the rash on Monday.").latency_ms

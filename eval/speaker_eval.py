@@ -35,10 +35,10 @@ import numpy as np
 import yaml
 from _common import LATEST, LIBRISPEECH, NOISE, VOICES, read_manifest
 
-from saysafe.audio.io import SR, load_audio
 from saysafe.config import CONFIG_DIR, load_yaml
-from saysafe.identity.embed import TooShort, cosine, embed, normalize
-from saysafe.identity.verify import Thresholds
+from saysafe.voice.embed import TooShort, cosine, embed, normalize
+from saysafe.voice.io import SR, load_audio
+from saysafe.voice.verify import Thresholds
 
 SEED = 13
 MIN_SPEECH = None  # set from config (the reply minimum) in main
@@ -192,7 +192,7 @@ class _Scorer:
         self.mean = mean
 
     def score_audio(self, audio, min_speech_s=None):
-        from saysafe.identity.verify import verify
+        from saysafe.voice.verify import verify
 
         profile = type("P", (), {"mean": self.mean})()
         from functools import partial
@@ -228,7 +228,7 @@ class _TextSTT:
         self.real, self.forced = real, forced
 
     def transcribe(self, audio):
-        from saysafe.audio.stt import Transcript
+        from band_demo.audio.stt import Transcript
 
         return (
             Transcript(self.forced, [], 0.0, "forced")
@@ -241,16 +241,17 @@ def run_attempts(
     attempts: list[dict], profile_mean: np.ndarray, t: Thresholds
 ) -> tuple[list, list]:
     """Each attempt: {group, condition, tier, reply: Clip, command: Clip|None, word, forced_text}."""
-    from saysafe.agent.channels import PhoneChannel
-    from saysafe.agent.events import EventBus
-    from saysafe.agent.mock_agent import MockAgent
+    from band_demo.agent.channels import PhoneChannel
+    from band_demo.agent.events import EventBus
+    from band_demo.agent.mock_agent import MockAgent
+    from band_demo.approvals_hook import Approver
+    from band_demo.audio.stt import get_stt
+
     from saysafe.approvals.audit import AuditLog
-    from saysafe.approvals.hook import Approver
     from saysafe.approvals.pending import PendingApprovals
     from saysafe.approvals.tokens import TokenService
-    from saysafe.audio.stt import get_stt
-    from saysafe.identity.embed import Embedding
     from saysafe.privacy.audience import FixedAudience
+    from saysafe.voice.embed import Embedding
 
     tmp = Path(tempfile.mkdtemp())
     clock = time.time
@@ -477,7 +478,7 @@ def main() -> int:
 
     # latency
     lat_embed, lat_stt = [], []
-    from saysafe.audio.stt import get_stt
+    from band_demo.audio.stt import get_stt
 
     reply_stt = get_stt("reply")
     for c in [c for c in test if c.condition == "close"][:30]:

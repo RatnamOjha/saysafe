@@ -5,13 +5,9 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
-
-# Real environment wins over .env, so tests and CI can override anything.
-load_dotenv(ROOT / ".env", override=False)
 
 
 def env(name: str, default: str | None = None) -> str | None:

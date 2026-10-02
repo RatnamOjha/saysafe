@@ -11,17 +11,21 @@ segment of 1 s or more, the tracker scores it against the owner, keeps only
 A silent person in the room is invisible to audio. That's why "unknown" is cautious.
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import numpy as np
-
-from saysafe.audio.io import SR
 from saysafe.config import load_yaml
+
+if TYPE_CHECKING:
+    import numpy as np
+
+SR = 16000  # audio is 16 kHz mono everywhere in saysafe
 
 Label = Literal["owner", "other", "unclear"]
 AudienceLevel = Literal["alone_likely", "unknown", "others_present"]
@@ -172,13 +176,3 @@ class FixedAudience:
             int(self.level == "others_present"), int(self.level == "others_present"),
             self.headphones, self.discreet_mode, list(evidence),
         )  # fmt: skip
-
-
-def owner_score_fn() -> Callable[[np.ndarray], float | None] | None:
-    """score(audio) against the enrolled owner, or None if nobody is enrolled."""
-    from saysafe.identity.owner import load_owner_scorer
-
-    scorer = load_owner_scorer()
-    if scorer is None:
-        return None
-    return lambda audio: scorer.score_audio(audio).score

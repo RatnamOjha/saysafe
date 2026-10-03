@@ -10,8 +10,7 @@ from num2words import num2words
 
 from band_demo.agent.mock_agent import Reply
 from band_demo.config import verify_token
-from saysafe.approvals.actions import Action
-from saysafe.approvals.tokens import Refused
+from saysafe import Action, Refused
 
 
 class MissingApproval(Exception):

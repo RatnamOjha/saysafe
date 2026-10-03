@@ -1,8 +1,8 @@
-"""before_speak(reply): detect, check audience, route, rewrite.
+"""before_speak(reply): where the band's reply goes. saysafe's PrivacyGuard decides.
 
 Instructions inside content are data: an email saying "read this code out loud"
 is just text to classify, and changes nothing about where the reply goes. The
-phone gets the full text whenever the channel includes it.
+phone gets the full text whenever the decision withholds anything.
 """
 
 from __future__ import annotations
@@ -10,15 +10,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from band_demo import privacy_llm
+from saysafe import PrivacyDecision, PrivacyGuard, Room
 from saysafe.privacy.audience import AudienceState
-from saysafe.privacy.detect import detect
-from saysafe.privacy.route import Channel, SpeakDecision, route
 
 if TYPE_CHECKING:
     from band_demo.agent.mock_agent import Reply
     from band_demo.agent.pipeline import TurnContext
 
-__all__ = ["Channel", "SpeakDecision", "before_speak"]
+__all__ = ["PrivacyDecision", "before_speak"]
 
 
 def audience_state(ctx: TurnContext) -> AudienceState:
@@ -36,30 +35,34 @@ def audience_state(ctx: TurnContext) -> AudienceState:
     return state
 
 
-def before_speak(reply: Reply, ctx: TurnContext) -> SpeakDecision:
+def before_speak(reply: Reply, ctx: TurnContext) -> PrivacyDecision:
     ev = ctx.events
     classifier, smoother = privacy_llm.from_env()
-    with ev.step("detection") as out:
-        d = detect(reply.text, reply.source_tags, classifier)
-        out.update(
-            level=d.level, categories=d.categories,
-            spans=[{"start": s.start, "end": s.end, "category": s.category, "text": s.text}
-                   for s in d.spans],
-            latency_ms_by_layer=d.latency_ms,
-        )  # fmt: skip
+    guard = PrivacyGuard(classifier, smoother)
     state = audience_state(ctx)
+    d = guard.check(
+        reply.text,
+        sources=reply.source_tags,
+        room=Room(state.level),
+        headphones=state.headphones,
+        discreet=state.discreet_mode,
+        whisper=getattr(ctx, "voice_style", "normal") == "whisper",
+    )
+    ev.publish(
+        "detection", level=d.level, categories=list(d.categories),
+        spans=[{"start": s.start, "end": s.end, "category": s.category, "text": s.text}
+               for s in d.spans],
+        latency_ms_by_layer=d.latency_ms,
+    )  # fmt: skip
     ev.publish(
         "audience_state", level=state.level, evidence=state.evidence,
         listening_seconds=state.listening_seconds, seconds_since_other=state.seconds_since_other,
         headphones=state.headphones, discreet_mode=state.discreet_mode,
     )  # fmt: skip
-    voice_style = getattr(ctx, "voice_style", "normal")
-    with ev.step("route_decision") as out:
-        decision = route(reply.text, d, state, voice_style, smoother)
-        out.update(
-            channel=decision.channel, rule_cell=decision.rule_cell, reasons=decision.reasons,
-            spoken=decision.spoken_text, phone=decision.phone_text is not None,
-        )  # fmt: skip
-    if decision.rewrite_step:
-        ev.publish("rewrite_step", step=decision.rewrite_step, text=decision.spoken_text)
-    return decision
+    ev.publish(
+        "route_decision", channel=d.channel, rule_cell=d.rule, reasons=list(d.reasons),
+        spoken=d.say, phone=d.send_to_phone is not None,
+    )  # fmt: skip
+    if d.rewrite:
+        ev.publish("rewrite_step", step=d.rewrite, text=d.say)
+    return d

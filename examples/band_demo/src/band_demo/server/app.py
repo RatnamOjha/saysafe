@@ -17,9 +17,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from band_demo import config as demo_config
 from band_demo.agent.events import Event
-from saysafe.approvals.pending import PendingApprovals
+from saysafe import StepClosed
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -42,9 +41,13 @@ class MicIn(BaseModel):
     on: bool
 
 
-def create_app(pending: PendingApprovals | None = None, session=None) -> FastAPI:
-    """Approval routes always; the demo page and controls when a DemoSession is given."""
-    pending = pending or demo_config.pending()
+def create_app(approver=None, session=None) -> FastAPI:
+    """Approval routes always; the demo page and controls when a DemoSession is given.
+    approver: a band_demo.approvals_hook.Approver (default: the shared one)."""
+    if approver is None:
+        from band_demo.approvals_hook import get_approver
+
+        approver = get_approver()
     sockets: set[WebSocket] = set()
     loop_holder: dict = {}
 
@@ -83,12 +86,16 @@ def create_app(pending: PendingApprovals | None = None, session=None) -> FastAPI
     app = FastAPI(title="earshot", lifespan=lifespan)
 
     def resolve(action_id: str, verb: str) -> dict:
-        r = pending.approve(action_id) if verb == "approve" else pending.deny(action_id)
-        if r.status is None:
-            raise HTTPException(404, "No such approval request")
-        if not r.changed:  # already resolved, or expired
-            raise HTTPException(409, f"Request is already {r.status}")
-        return {"action_id": action_id, "status": r.status}
+        try:
+            step = approver.resolve(action_id, approve=verb == "approve")
+        except StepClosed as e:
+            if e.status is None:
+                raise HTTPException(404, "No such approval request") from None
+            raise HTTPException(409, f"Request is already {e.status}") from None
+        return {
+            "action_id": action_id,
+            "status": "approved" if step.status == "approved" else "denied",
+        }
 
     @app.post("/approvals/{action_id}/approve")
     def approve(action_id: str) -> dict:

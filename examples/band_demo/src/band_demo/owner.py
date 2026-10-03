@@ -2,29 +2,37 @@
 
 import logging
 from collections.abc import Callable
-from functools import partial
 
 import numpy as np
 
-from band_demo.config import env, profile_store
-from saysafe.voice.embed import Embedding, cosine, embed
-from saysafe.voice.profile_store import Profile, ProfileError
-from saysafe.voice.verify import VerifyResult, verify
+from band_demo.config import env, profile_store, thresholds
+from saysafe.config import load_yaml
+from saysafe.voice import Embedding, Profile, ProfileError, VerifyResult, VoiceID
 
 log = logging.getLogger(__name__)
+
+VOICE = VoiceID()  # models load on first use
+COMMAND_MIN_SPEECH_S = load_yaml("voice")["enroll"]["min_speech_s"]
+
+
+def embed_command(audio: np.ndarray) -> Embedding:
+    """The spoken command's embedding (raises TooShort under 0.8 s of speech)."""
+    return VOICE.embed(audio, min_speech_s=COMMAND_MIN_SPEECH_S)
 
 
 class VoiceScorer:
     """Scores audio and embeddings against the owner's profile."""
 
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, voice: VoiceID = VOICE):
         self.profile = profile
+        self.voice = voice
 
     def score_audio(self, audio: np.ndarray, min_speech_s: float | None = None) -> VerifyResult:
-        return verify(audio, self.profile, embedder=partial(embed, min_speech_s=min_speech_s))
+        minimum = COMMAND_MIN_SPEECH_S if min_speech_s is None else min_speech_s
+        return self.voice.verify(audio, self.profile, thresholds(), min_speech_s=minimum)
 
     def score_embedding(self, embedding: Embedding) -> float:
-        return cosine(embedding.vector, self.profile.mean)
+        return self.voice.score_embedding(embedding, self.profile)
 
 
 def load_owner_scorer() -> VoiceScorer | None:

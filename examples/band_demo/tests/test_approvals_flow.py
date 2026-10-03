@@ -1,5 +1,4 @@
 import json
-import threading
 from decimal import Decimal
 
 import numpy as np
@@ -10,22 +9,19 @@ from band_demo.agent.events import EventBus
 from band_demo.agent.executor import Executor, Refused
 from band_demo.agent.mock_agent import MockAgent
 from band_demo.agent.pipeline import Pipeline
-from band_demo.approvals_hook import Approver, fuse
+from band_demo.approvals_hook import Approver
 from band_demo.audio.stt import Transcript
 from band_demo.audio.tts import NullTTS
 from band_demo.server.app import create_app
 from fastapi.testclient import TestClient
 
-from saysafe.approvals.audit import AuditLog
-from saysafe.approvals.challenge import ChallengeIssuer
-from saysafe.approvals.pending import PendingApprovals
-from saysafe.approvals.tokens import TokenService
+from saysafe import ApprovalGuard, AuditLog, StepClosed, Thresholds
+from saysafe.approvals.fusion import band
 from saysafe.privacy.audience import FixedAudience
 from saysafe.voice.embed import Embedding
-from saysafe.voice.verify import Thresholds, VerifyResult, band
+from saysafe.voice.verify import VerifyResult
 
 T = Thresholds(0.45, 0.25, "test")
-WEIGHTS = {"reply_weight": 0.6, "command_weight": 0.4}
 OWNER = np.ones(192, dtype=np.float32) / np.sqrt(192)
 
 
@@ -67,19 +63,17 @@ def world(tmp_path):
     events = EventBus()
     events.log = []
     events.subscribe(events.log.append)
-    tokens = TokenService(b"k" * 32, tmp_path / "n.sqlite", clock=clock, ttl_s=60)
-    pending = PendingApprovals(tokens, clock=clock, ttl_s=120)
-    stt, scorer = FakeSTT(), FakeScorer()
-    approver = Approver(
-        stt=stt, scorer=scorer, tokens=tokens, pending=pending,
-        issuer=ChallengeIssuer(clock=clock), audit=AuditLog(tmp_path / "audit.jsonl"),
-        clock=clock, t=T,
+    guard = ApprovalGuard(
+        b"k" * 32, nonces=tmp_path / "n.sqlite", clock=clock, thresholds=T,
+        audit=AuditLog(tmp_path / "audit.jsonl"),
     )  # fmt: skip
+    stt, scorer = FakeSTT(), FakeScorer()
+    approver = Approver(stt=stt, scorer=scorer, guard=guard)
     replies: list = []
     pipeline = Pipeline(
         tts=NullTTS(), agent=MockAgent(fixed_code="482913"), events=events,
         phone=PhoneChannel(events, console_only=True),
-        executor=Executor(verify_token=tokens.verify),
+        executor=Executor(verify_token=guard.verify),
         listen=lambda timeout: replies.pop(0) if replies else None,
         audience=FixedAudience("alone_likely"),  # these tests are about approvals, not privacy
     )  # fmt: skip
@@ -91,7 +85,7 @@ def world(tmp_path):
 
     w = W()
     w.__dict__.update(
-        clock=clock, events=events, tokens=tokens, pending=pending, stt=stt, scorer=scorer,
+        clock=clock, events=events, guard=guard, stt=stt, scorer=scorer,
         approver=approver, pipeline=pipeline, replies=replies, audit=tmp_path / "audit.jsonl",
     )  # fmt: skip
     return w
@@ -138,26 +132,6 @@ def audit_lines(w):
     return [json.loads(line) for line in w.audit.read_text().splitlines()]
 
 
-# fusion ---------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "reply, command, fused, b",
-    [
-        (0.8, 0.8, 0.8, "accept"),
-        (0.5, None, 0.5, "accept"),          # command too short -> reply alone
-        (None, 0.9, None, "uncertain"),      # no reply voice -> never accept
-        (0.9, 0.2, 0.62, "uncertain"),       # command under t_reject blocks accept
-        (0.2, 0.95, 0.5, "uncertain"),       # reply under t_reject blocks accept
-        (0.1, 0.1, 0.1, "reject"),
-        (0.4, 0.55, 0.46, "accept"),
-    ],
-)  # fmt: skip
-def test_fuse(reply, command, fused, b):
-    f, got = fuse(reply, command, T, WEIGHTS)
-    assert got == b and (f is None if fused is None else f == pytest.approx(fused, abs=1e-6))
-
-
 # the flow ---------------------------------------------------------------------
 
 
@@ -174,22 +148,23 @@ def test_friend_yes_steps_up_then_phone_approve_completes(world):
     r = run(say(world, "yes", reply_voice=0.12), "order my usual", command_voice=0.1)
     assert r.decision.outcome == "step_up"
     assert world.pipeline.executor.executed == []
-    assert "Tap on your phone" in world.pipeline.tts.spoken[-1]
+    assert "Check your phone" in world.pipeline.tts.spoken[-1]
     assert world.pipeline.phone.sent[-1].extra["action_id"] == r.action.id
     assert [e.data["state"] for e in world.events.log if e.type == "led"][-1] == "amber"
 
-    assert world.pending.approve(r.action.id).changed
+    assert world.approver.resolve(r.action.id, approve=True).status == "approved"
     assert r.action in world.pipeline.executor.executed
     assert world.pipeline.tts.spoken[-1] == "Order placed. Arrives at 7:40."
-    again = world.pending.approve(r.action.id)  # already resolved, no rerun
-    assert again.status == "approved" and not again.changed
+    with pytest.raises(StepClosed):  # already resolved, no rerun
+        world.approver.resolve(r.action.id, approve=True)
     assert world.pipeline.executor.executed.count(r.action) == 1
 
 
 def test_phone_deny_stops(world):
     r = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
-    assert world.pending.deny(r.action.id).changed
-    assert world.pending.approve(r.action.id).status == "denied"
+    assert world.approver.resolve(r.action.id, approve=False).status == "rejected"
+    with pytest.raises(StepClosed, match="rejected"):
+        world.approver.resolve(r.action.id, approve=True)
     assert world.pipeline.executor.executed == []
     assert world.pipeline.tts.spoken[-1] == "Okay, I won't."
 
@@ -197,7 +172,8 @@ def test_phone_deny_stops(world):
 def test_phone_request_expires(world):
     r = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
     world.clock.now += 121
-    assert world.pending.approve(r.action.id).status == "expired"
+    with pytest.raises(StepClosed, match="expired"):
+        world.approver.resolve(r.action.id, approve=True)
     assert world.pipeline.executor.executed == []
 
 
@@ -271,7 +247,7 @@ def test_new_payee_goes_straight_to_phone(world):
     assert world.pipeline.tts.spoken == [
         "New payee. Priya, twenty dollars. Check your phone to approve."
     ]
-    world.pending.approve(r.action.id)
+    world.approver.resolve(r.action.id, approve=True)
     assert world.pipeline.tts.spoken[-1] == "Sent twenty dollars to Priya."
 
 
@@ -296,7 +272,7 @@ def test_missing_profile_steps_up(world):
     world.approver._scorer = None
     r = run(say(world, "yes"), "order my usual")
     assert r.decision.outcome == "step_up"
-    assert r.decision.reasons == ["No owner voice enrolled"]
+    assert r.decision.reasons[0] == "No owner voice enrolled"
 
 
 def test_audit_has_no_audio_embeddings_or_transcripts(world):
@@ -321,95 +297,19 @@ def test_trace_events_in_order(world):
     assert [t for t in types if t in order] == order
 
 
-# tokens -------------------------------------------------------------------------
-
-
-@pytest.fixture
-def tokens(tmp_path):
-    return TokenService(b"s" * 32, tmp_path / "n.sqlite", clock=Clock(), ttl_s=60)
-
-
-def test_token_approved_action_runs(tokens):
-    a = MockAgent().order_usual()
-    assert tokens.verify(tokens.issue(a, "voice", "voice", 0.8), a)["method"] == "voice"
-
-
-def test_changed_amount_after_approval_is_refused(tokens):
-    a = MockAgent().order_usual()
-    token = tokens.issue(a, "voice", "voice", 0.8)
-    tampered = a.model_copy(update={"amount": Decimal("430.20")})
+def test_executor_refuses_a_changed_action(world):
+    r = run(say(world, "yes"), "order my usual")
+    tampered = r.action.model_copy(update={"amount": Decimal("430.20")})
+    token = world.guard.tokens.issue(r.action, "voice", "voice", 0.8)
     with pytest.raises(Refused, match="action_changed"):
-        Executor(verify_token=tokens.verify).run(tampered, token)
-
-
-@pytest.mark.parametrize("field, value", [("counterparty", "Evil"), ("destination", "work"),
-                                          ("id", "other")])  # fmt: skip
-def test_any_changed_field_is_refused(tokens, field, value):
-    a = MockAgent().order_usual()
-    token = tokens.issue(a, "voice", "voice", 0.8)
-    with pytest.raises(Refused, match="action_changed"):
-        tokens.verify(token, a.model_copy(update={field: value}))
-
-
-def test_replayed_token_is_refused(tokens):
-    a = MockAgent().order_usual()
-    token = tokens.issue(a, "voice", "voice", 0.8)
-    tokens.verify(token, a)
-    with pytest.raises(Refused, match="replayed"):
-        tokens.verify(token, a)
-
-
-def test_expired_token_is_refused(tokens):
-    a = MockAgent().order_usual()
-    token = tokens.issue(a, "voice", "voice", 0.8)
-    tokens.clock.now += 60
-    with pytest.raises(Refused, match="expired"):
-        tokens.verify(token, a)
-
-
-@pytest.mark.parametrize("mangle", [
-    lambda t: t[:-2] + ("AA" if not t.endswith("AA") else "BB"),  # bad signature
-    lambda t: "garbage",
-    lambda t: t.split(".")[0],                                    # signature stripped
-])  # fmt: skip
-def test_forged_token_is_refused(tokens, mangle):
-    a = MockAgent().order_usual()
-    with pytest.raises(Refused, match="bad_signature"):
-        tokens.verify(mangle(tokens.issue(a, "voice", "voice", 0.8)), a)
-
-
-def test_token_from_another_secret_is_refused(tokens, tmp_path):
-    a = MockAgent().order_usual()
-    other = TokenService(b"x" * 32, tmp_path / "o.sqlite", clock=Clock())
-    with pytest.raises(Refused, match="bad_signature"):
-        tokens.verify(other.issue(a, "voice", "voice", 0.8), a)
-
-
-def test_concurrent_reuse_only_one_wins(tokens):
-    a = MockAgent().order_usual()
-    token = tokens.issue(a, "voice", "voice", 0.8)
-    results = []
-
-    def use():
-        try:
-            tokens.verify(token, a)
-            results.append("ok")
-        except Refused as e:
-            results.append(e.reason)
-
-    threads = [threading.Thread(target=use) for _ in range(16)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert results.count("ok") == 1 and results.count("replayed") == 15
+        Executor(verify_token=world.guard.verify).run(tampered, token)
 
 
 # routes --------------------------------------------------------------------------
 
 
 def test_routes_approve_deny_404_409(world):
-    client = TestClient(create_app(world.pending))
+    client = TestClient(create_app(world.approver))
     r = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
     assert client.post("/approvals/nope/approve").status_code == 404
     assert client.post(f"/approvals/{r.action.id}/approve").json()["status"] == "approved"
@@ -432,7 +332,7 @@ def test_money_readback_stays_private_when_others_may_hear(world, room):
         "Someone else might be listening. Check your phone to approve."
     ]
     assert "Jake, fifty dollars." in world.pipeline.phone.sent[-1].text
-    assert world.pending.approve(r.action.id).changed
+    assert world.approver.resolve(r.action.id, approve=True).status == "approved"
     assert r.action in world.pipeline.executor.executed
 
 

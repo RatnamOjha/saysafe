@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from band_demo import llm
 from band_demo.config import env
-from saysafe.approvals.actions import Action
+from saysafe import Action
 
 SourceTag = str  # bank | health | otp | email | calendar | public
 

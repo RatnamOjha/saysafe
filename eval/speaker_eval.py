@@ -248,20 +248,16 @@ def run_attempts(
     from band_demo.approvals_hook import Approver
     from band_demo.audio.stt import get_stt
 
-    from saysafe.approvals.audit import AuditLog
-    from saysafe.approvals.pending import PendingApprovals
-    from saysafe.approvals.tokens import TokenService
+    from saysafe import ApprovalGuard, AuditLog
     from saysafe.privacy.audience import FixedAudience
     from saysafe.voice.embed import Embedding
 
     tmp = Path(tempfile.mkdtemp())
-    clock = time.time
-    tokens = TokenService(b"eval" * 8, tmp / "n.sqlite", clock=clock)
-    issuer = _ForcedIssuer(clock)
+    guard = ApprovalGuard(b"eval" * 8, nonces=tmp / "n.sqlite", thresholds=t,
+                          audit=AuditLog(tmp / "audit.jsonl"))  # fmt: skip
+    issuer = guard.issuer = _ForcedIssuer(time.time)
     stt = _TextSTT(get_stt("reply"), None)
-    approver = Approver(stt=stt, scorer=_Scorer(profile_mean), tokens=tokens,
-                        pending=PendingApprovals(tokens, clock=clock), issuer=issuer,
-                        audit=AuditLog(tmp / "audit.jsonl"), clock=clock, t=t)  # fmt: skip
+    approver = Approver(stt=stt, scorer=_Scorer(profile_mean), guard=guard)
     agent = MockAgent()
     events = EventBus()
     phone = PhoneChannel(events, console_only=True)

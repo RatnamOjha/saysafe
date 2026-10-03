@@ -25,7 +25,7 @@ from band_demo.agent.pipeline import LiveMic, Pipeline
 from band_demo.config import env
 from band_demo.owner import owner_score_fn
 from saysafe.privacy.audience import AudienceTracker
-from saysafe.voice.vad import StreamingVAD
+from saysafe.voice import StreamingVAD
 
 log = logging.getLogger(__name__)
 

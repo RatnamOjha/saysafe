@@ -3,7 +3,6 @@
 import logging
 from pathlib import Path
 
-import numpy as np
 import typer
 from rich.console import Console
 
@@ -30,12 +29,10 @@ def _quiet_libraries() -> None:
 
 
 def _load_voice_models() -> None:
-    from saysafe.voice import vad
-    from saysafe.voice.embed import _encoder
+    from band_demo.owner import VOICE
 
     with console.status("Loading voice model..."):
-        vad.segments(np.zeros(16000, dtype=np.float32))
-        _encoder()
+        VOICE.warm()
 
 
 @app.command("llm-ping")
@@ -144,9 +141,8 @@ def verify(
     from band_demo.audio import capture
     from band_demo.config import profile_store
     from band_demo.config import thresholds as demo_thresholds
-    from saysafe.voice import io
-    from saysafe.voice import verify as v
-    from saysafe.voice.profile_store import ProfileError
+    from band_demo.owner import VOICE
+    from saysafe.voice import ProfileError, load_audio
 
     try:
         profile = profile_store().load(name)
@@ -167,8 +163,8 @@ def verify(
             console.print("  🎙  Recording...")
             audio = capture.record(3.0)
         else:
-            audio = io.load_audio(path)
-        r = v.verify(audio, profile)
+            audio = load_audio(path)
+        r = VOICE.verify(audio, profile, t)
         color = {"accept": "green", "uncertain": "yellow", "reject": "red"}[r.band]
         score = "too short" if r.too_short else f"{r.score:.3f}"
         table.add_row(
@@ -402,25 +398,26 @@ def demo_actions():
 @app.command()
 def policy(demo: bool = typer.Option(False, "--demo", help="Show every demo action.")) -> None:
     """Show the tier, rule, reasons and read-back for actions."""
+    import secrets
+
     from rich.table import Table
 
-    from saysafe.approvals.challenge import ChallengeIssuer
-    from saysafe.approvals.policy import assess
-    from saysafe.approvals.readback import readback
+    from saysafe import ApprovalGuard, Room
 
     if not demo:
         _fail("Use --demo.")
-    issuer = ChallengeIssuer()
+    guard = ApprovalGuard(secrets.token_bytes(32))
     table = Table(show_lines=True)
     for col in ("said", "tier", "rule", "reasons", "read-back", "s"):
         table.add_column(col)
     for said, action in demo_actions():
-        risk = assess(action)
-        word = issuer.issue(action.id).word if risk.tier == "voice_challenge" else None
-        rb = readback(action, risk, word)
+        risk = guard.assess(action)
+        step = guard.start(action, room=Room.ALONE)
         tier = risk.tier + (f"\n(bumped from {risk.base_tier})" if risk.bumped else "")
+        seconds = len(step.say.split()) / 2.6  # read-backs are sized for 2.6 words/s
+        said_back = step.say or "(runs at once)"
         table.add_row(
-            said, tier, risk.rule_id, "\n".join(risk.reasons), rb.text, f"{rb.est_seconds:.1f}"
+            said, tier, risk.rule_id, "\n".join(risk.reasons), said_back, f"{seconds:.1f}"
         )
     console.print(table)
 
@@ -433,9 +430,9 @@ def detect(
     """Show how sensitive a reply is: level, flagged spans, latency per layer."""
     from rich.text import Text
 
-    from saysafe.privacy.detect import detect as run_detect
+    from saysafe import PrivacyGuard
 
-    d = run_detect(text, set(tag or []))
+    d = PrivacyGuard().detect(text, sources=tag or [])
     color = {"public": "green", "personal": "cyan", "sensitive": "yellow", "secret": "red"}
     console.print(f"level: [bold {color[d.level]}]{d.level}[/]   categories: {d.categories}")
     marked = Text(text)

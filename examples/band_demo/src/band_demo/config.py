@@ -10,11 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from saysafe.approvals.audit import AuditLog
-from saysafe.approvals.pending import PendingApprovals
-from saysafe.approvals.tokens import TokenService
-from saysafe.voice.verify import Thresholds
-from saysafe.voice.verify import thresholds as default_thresholds
+from saysafe import Action, ApprovalGuard, AuditLog, Thresholds, load_thresholds
 
 ROOT = Path(__file__).resolve().parents[4]  # the repo
 CONFIG_DIR = ROOT / "config"  # repo-level overrides, e.g. eval's thresholds.calibrated.yaml
@@ -44,7 +40,7 @@ def demo_config() -> dict:
 
 def thresholds() -> Thresholds:
     """Calibrated thresholds when the eval has produced them, else saysafe's placeholders."""
-    return default_thresholds(CALIBRATED if CALIBRATED.exists() else None)
+    return load_thresholds(CALIBRATED if CALIBRATED.exists() else None)
 
 
 def profile_store():
@@ -58,7 +54,7 @@ def profile_store():
 
 
 @lru_cache
-def token_service() -> TokenService:
+def approvals() -> ApprovalGuard:
     """One per process, shared by the approvals hook, the executor and the phone routes."""
     secret = env("EARSHOT_SECRET")
     if not secret:
@@ -70,17 +66,13 @@ def token_service() -> TokenService:
         key = secrets.token_bytes(32)
     else:
         key = secret.encode()
-    return TokenService(key, db_path=data_dir() / "nonces.sqlite")
+    return ApprovalGuard(
+        key,
+        nonces=data_dir() / "nonces.sqlite",
+        audit=AuditLog(data_dir() / "audit.jsonl"),
+        thresholds=thresholds(),
+    )
 
 
-def verify_token(token: str, action) -> None:
-    token_service().verify(token, action)
-
-
-@lru_cache
-def pending() -> PendingApprovals:
-    return PendingApprovals(token_service())
-
-
-def audit_log() -> AuditLog:
-    return AuditLog(data_dir() / "audit.jsonl")
+def verify_token(token: str, action: Action) -> None:
+    approvals().verify(token, action)

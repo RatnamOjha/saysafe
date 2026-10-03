@@ -1,15 +1,13 @@
-"""before_execute(action): the approval decision flow.
+"""before_execute(action): the band's side of an approval. saysafe decides; this does the IO.
 
-1. Assess risk. Tier none: issue a token and continue.
-2. voice / voice_challenge: speak the read-back (with a one-time word if needed),
-   listen for the reply, transcribe it.
-3. Score the reply voice against the owner, fuse with the command's score.
-4. APPROVE only if the fused score is in the accept band, neither score is below
-   t_reject, and the reply matched (affirm, or challenge_ok for the challenge tier).
-   REJECT on negate or silence. Anything else STEPS UP to a phone tap.
-   phone_tap tier goes straight to the phone.
+1. ApprovalGuard.start: the tier, and what to say (a read-back, maybe a one-time word,
+   or "check your phone" when others may hear a money read-back).
+2. Voice tiers: speak it, listen for the reply, transcribe it, score the reply voice
+   (and the command's) against the owner, and hand all that to ApprovalGuard.reply.
+3. Whatever needs the phone goes out as an ntfy request; its Approve / Deny buttons hit
+   the server, which calls Approver.resolve.
 
-Every decision is audited (no audio, embeddings or transcripts) and traced.
+saysafe's events are forwarded to the trace UI under the demo's event names.
 """
 
 from __future__ import annotations
@@ -18,22 +16,14 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from band_demo import config as demo_config
 from band_demo.owner import VoiceScorer, load_owner_scorer
-from saysafe.approvals.actions import Action, action_hash
-from saysafe.approvals.audit import AuditLog
-from saysafe.approvals.challenge import ChallengeIssuer
-from saysafe.approvals.pending import PendingApprovals
-from saysafe.approvals.policy import RiskAssessment, assess
-from saysafe.approvals.readback import readback, summary
-from saysafe.approvals.response import Match, match_response
-from saysafe.approvals.tokens import TokenService
-from saysafe.config import load_yaml
-from saysafe.voice.verify import Thresholds, VerifyResult
+from saysafe import Action, ApprovalGuard, Room, Step
 
 if TYPE_CHECKING:
+    from band_demo.agent.events import EventBus
     from band_demo.agent.pipeline import TurnContext
     from band_demo.audio.stt import STT
 
@@ -41,9 +31,8 @@ log = logging.getLogger(__name__)
 
 Outcome = Literal["approve", "step_up", "reject"]
 
-STEP_UP_LINE = "I couldn't confirm it's you. Tap on your phone to approve."
-PRIVATE_LINE = "Someone else might be listening. Check your phone to approve."
-REJECT_LINE = "Okay, I won't."
+_EVENT_NAMES = {"readback": "readback_spoken", "voice_scored": "speaker_scored"}
+_LED = {"approve": "done", "step_up": "amber", "reject": "off"}
 
 
 @dataclass
@@ -54,53 +43,24 @@ class ApprovalDecision:
     reasons: list[str] = field(default_factory=list)
 
 
-def fuse(
-    reply: float | None, command: float | None, t: Thresholds, weights: dict
-) -> tuple[float | None, str]:
-    """(fused score, band). Missing reply score -> uncertain. Either score under
-    t_reject -> never accept."""
-    from saysafe.voice.verify import band
-
-    if reply is None:
-        return None, "uncertain"
-    if command is None:
-        fused = reply
-    else:
-        fused = weights["reply_weight"] * reply + weights["command_weight"] * command
-    b = band(fused, t)
-    if b == "accept" and min(s for s in (reply, command) if s is not None) < t.t_reject:
-        b = "uncertain"
-    return fused, b
-
-
 class Approver:
-    """before_execute with every dependency injectable (STT, scorer, clock, tokens)."""
+    """before_execute with every dependency injectable (STT, scorer, the guard)."""
 
     def __init__(
         self,
         *,
         stt: STT | None = None,
         scorer: VoiceScorer | None | Callable[[], VoiceScorer | None] = load_owner_scorer,
-        tokens: TokenService | None = None,
-        pending: PendingApprovals | None = None,
-        issuer: ChallengeIssuer | None = None,
-        audit: AuditLog | None = None,
-        clock: Callable[[], float] = time.time,
-        t: Thresholds | None = None,
+        guard: ApprovalGuard | None = None,
     ):
         self._stt = stt
         self._scorer = scorer
-        self._tokens = tokens
-        self.pending = pending or demo_config.pending()
-        self.clock = clock
-        self.issuer = issuer or ChallengeIssuer(clock=clock)
-        self.audit = audit or demo_config.audit_log()
-        self.t = t
-        self.cfg = load_yaml("policy")["voice"]
-
-    @property
-    def tokens(self) -> TokenService:
-        return self._tokens or demo_config.token_service()
+        self.guard = guard or demo_config.approvals()
+        self.guard.on_event = self._forward
+        self.cfg = self.guard.policy["voice"]
+        self._events: EventBus | None = None
+        self._turn: dict[str, Any] = {}  # extras for the trace of the current turn
+        self._waiting: dict[str, TurnContext] = {}  # step id -> the turn that asked the phone
 
     @property
     def stt(self) -> STT:
@@ -119,79 +79,40 @@ class Approver:
     # the flow
 
     def before_execute(self, action: Action, ctx: TurnContext) -> ApprovalDecision:
-        start = time.perf_counter()
-        latency: dict[str, float] = {}
-        ev = ctx.events
-        risk = assess(action)
-        ev.publish(
-            "risk_assessed", action_id=action.id, tier=risk.tier, rule_id=risk.rule_id,
-            reasons=risk.reasons, bumped=risk.bumped, action=action.model_dump(mode="json"),
-        )  # fmt: skip
-        log_base = dict(
-            action_id=action.id, action_hash=action_hash(action), type=action.type,
-            source=action.source, tier=risk.tier, rule_id=risk.rule_id, reasons=risk.reasons,
-        )  # fmt: skip
+        self._events = ctx.events
+        self._turn = {"latency": {}, "start": time.perf_counter()}
+        try:
+            return self._before_execute(action, ctx)
+        finally:
+            self._turn = {}  # a later phone tap isn't part of this turn's trace
 
-        def finish(decision: ApprovalDecision, method: str, **extra) -> ApprovalDecision:
-            latency["total"] = round((time.perf_counter() - start) * 1000, 1)
-            ev.publish(
-                "decision", action_id=action.id, outcome=decision.outcome, method=method,
-                latency_ms_by_step=latency, **extra,
-            )  # fmt: skip
-            self.audit.record(
-                **log_base, outcome=decision.outcome, method=method, latency_ms=latency, **extra
-            )
-            ev.led({"approve": "done", "step_up": "amber", "reject": "off"}[decision.outcome])
-            return decision
+    def _before_execute(self, action: Action, ctx: TurnContext) -> ApprovalDecision:
+        latency = self._turn["latency"]
+        room, headphones = _room(ctx)
+        step = self.guard.start(action, room=room, headphones=headphones)
+        if step.status == "approved":
+            return ApprovalDecision("approve", step.token, reasons=list(step.reasons))
 
-        if risk.tier == "none":
-            token = self.tokens.issue(action, risk.tier, method="none", fused_score=None)
-            return finish(ApprovalDecision("approve", token, reasons=risk.reasons), "none")
-
-        private_why = self._private_readback_reason(action, ctx)
-
-        if risk.tier == "phone_tap":
-            rb = readback(action, risk)
-            said = PRIVATE_LINE if private_why else rb.text
-            with ev.step("readback_spoken", text=said, tier=risk.tier, private=bool(private_why)):
-                ctx.speak(said)
-            self._request_phone(action, risk, ctx, rb.body)
-            reasons = [*risk.reasons, *([private_why] if private_why else [])]
-            return finish(ApprovalDecision("step_up", reasons=reasons), "phone_tap")
-
-        # voice or voice_challenge, unless the room shouldn't hear the details
-        if private_why:
-            ctx.speak(PRIVATE_LINE)
-            ev.publish("readback_spoken", text=PRIVATE_LINE, tier=risk.tier, private=True)
-            self._request_phone(action, risk, ctx, summary(action))
-            return finish(ApprovalDecision("step_up", reasons=[private_why]), "phone_tap",
-                          match="private_readback")  # fmt: skip
-
-        challenge = self.issuer.issue(action.id) if risk.tier == "voice_challenge" else None
-        rb = readback(action, risk, challenge.word if challenge else None)
         t0 = time.perf_counter()
-        ctx.speak(rb.text)
+        ctx.speak(step.say)
         latency["readback"] = _ms(t0)
-        ev.publish(
-            "readback_spoken", text=rb.text, tier=risk.tier,
-            challenge_word=challenge.word if challenge else None,
-        )  # fmt: skip
+        if step.status == "awaiting_phone":
+            return self._to_phone(step, ctx)
 
-        ev.led("listening")
+        ctx.events.led("listening")
         t0 = time.perf_counter()
         heard = ctx.listen(self.cfg["reply_timeout_s"])
         latency["listen"] = _ms(t0)
         if heard is None:
-            ev.publish("reply_captured", text=None, timed_out=True)
-            if challenge:
-                self.issuer.consume(challenge)
-            ctx.speak(REJECT_LINE)
-            return finish(ApprovalDecision("reject", reasons=["No reply"]), "voice",
-                          match="timeout")  # fmt: skip
+            ctx.events.publish("reply_captured", text=None, timed_out=True)
+            step = self.guard.reply(step, None)
+            ctx.speak(step.say)
+            return ApprovalDecision("reject", reasons=list(step.reasons))
 
-        # transcript + voice score
+        # transcript + voice scores
+        detail = None
         if isinstance(heard, str):  # text mode: no audio, so no voice evidence
-            transcript, reply_result = heard, None
+            transcript, reply_result, detail = heard, None, "No voice to check (text reply)"
         else:
             t0 = time.perf_counter()
             transcript = self.stt.transcribe(heard).text
@@ -200,105 +121,80 @@ class Approver:
             minimum = self.cfg["min_reply_speech_s"]  # replies are short; see policy.yaml
             reply_result = self.scorer.score_audio(heard, minimum) if self.scorer else None
             latency["speaker"] = _ms(t0)
-        ev.publish(
-            "reply_captured", text=transcript, timed_out=False,
-            speech_seconds=None if reply_result is None else round(reply_result.speech_seconds, 2),
-        )  # fmt: skip
-
-        t = self.t or demo_config.thresholds()
-        reply_score = reply_result.score if reply_result else None
+            if self.scorer is None:
+                detail = "No owner voice enrolled"
+            elif reply_result.too_short:
+                detail = "Too little speech to check the voice"
+        speech = reply_result.speech_seconds if reply_result else 0.0
+        ctx.events.publish("reply_captured", text=transcript, timed_out=False,
+                           speech_seconds=round(speech, 2) if reply_result else None)  # fmt: skip
         command_score = (
             self.scorer.score_embedding(ctx.command_embedding)
             if self.scorer and ctx.command_embedding is not None
             else None
         )
-        fused, voice_band = fuse(reply_score, command_score, t, self.cfg)
-        scores = {
-            "reply": _r(reply_score), "command": _r(command_score), "fused": _r(fused),
-            "band": voice_band, "t_accept": t.t_accept, "t_reject": t.t_reject,
-        }  # fmt: skip
-        speech = reply_result.speech_seconds if reply_result else 0.0
-        ev.publish("speaker_scored", **scores, speech_seconds=round(speech, 2),
-                   owner_enrolled=self.scorer is not None)  # fmt: skip
-
+        self._turn.update(speech_seconds=round(speech, 2), owner_enrolled=self.scorer is not None)
         t0 = time.perf_counter()
-        match: Match = match_response(transcript, risk.tier, challenge, self.clock())
-        latency["match"] = _ms(t0)
-        if challenge:
-            self.issuer.consume(challenge)  # one reply per word, right or wrong
-        ev.publish("reply_matched", kind=match.kind, detail=match.detail)
+        step = self.guard.reply(
+            step,
+            transcript,
+            voice_score=reply_result.score if reply_result else None,
+            command_score=command_score,
+        )
+        latency["decide"] = _ms(t0)
+        if step.say:
+            ctx.speak(step.say)
+        reasons = [*([detail] if detail and step.status != "approved" else []), *step.reasons]
+        if step.status == "approved":
+            return ApprovalDecision("approve", step.token, reasons=reasons)
+        if step.status == "awaiting_phone":
+            return self._to_phone(step, ctx, reasons)
+        return ApprovalDecision("reject", reasons=reasons)
 
-        audit_extra = dict(scores=scores, speech_seconds=round(speech, 2), match=match.kind)
-        wanted = "challenge_ok" if risk.tier == "voice_challenge" else "affirm"
+    def resolve(self, step_id: str, approve: bool) -> Step:
+        """A tap on the phone. Raises saysafe.StepClosed if it's unknown or already settled."""
+        step = self.guard.phone_approve(step_id) if approve else self.guard.phone_deny(step_id)
+        ctx = self._waiting.pop(step_id, None)
+        if ctx is not None:
+            if approve:
+                ctx.complete_approved(step.action, step.token)
+            else:
+                ctx.speak(step.say)
+        return step
 
-        if match.kind == "negate":
-            ctx.speak(REJECT_LINE)
-            return finish(ApprovalDecision("reject", reasons=[match.detail]), "voice",
-                          **audit_extra)  # fmt: skip
-        if match.kind == wanted and voice_band == "accept":
-            token = self.tokens.issue(action, risk.tier, method="voice", fused_score=fused)
-            return finish(ApprovalDecision("approve", token, reasons=risk.reasons), "voice",
-                          **audit_extra)  # fmt: skip
+    def _to_phone(
+        self, step: Step, ctx: TurnContext, reasons: list[str] | None = None
+    ) -> ApprovalDecision:
+        self._waiting[step.id] = ctx
+        ctx.phone.request_approval(step.id, step.phone_request)
+        return ApprovalDecision("step_up", reasons=reasons or list(step.reasons))
 
-        why = _step_up_reason(match, wanted, voice_band, reply_result, self.scorer is not None)
-        ctx.speak(STEP_UP_LINE)
-        self._request_phone(action, risk, ctx, rb.body)
-        return finish(ApprovalDecision("step_up", reasons=[why]), "phone_tap", **audit_extra)
-
-    def _private_readback_reason(self, action: Action, ctx: TurnContext) -> str | None:
-        """Why the read-back must not be spoken here, or None if it can be."""
-        from band_demo.privacy_hook import audience_state
-        from saysafe.privacy.route import table_cell
-
-        cfg = load_yaml("policy").get("private_readback") or {}
-        if action.type not in cfg.get("types", []):
-            return None
-        room = audience_state(ctx)
-        if room.headphones or table_cell(cfg["level"], room.level) == "speak":
-            return None
-        return f"Read-back kept private ({room.level.replace('_', ' ')})"
-
-    def _request_phone(
-        self, action: Action, risk: RiskAssessment, ctx: TurnContext, summary: str
-    ) -> None:
-        def denied(a: Action) -> None:
-            ctx.events.publish("decision", action_id=a.id, outcome="reject", method="phone_tap")
-            ctx.speak(REJECT_LINE)
-            ctx.events.led("off")
-            self.audit.record(action_id=a.id, action_hash=action_hash(a), type=a.type,
-                              tier=risk.tier, outcome="reject", method="phone_tap")  # fmt: skip
-
-        def approved(a: Action, token: str) -> None:
-            self.audit.record(action_id=a.id, action_hash=action_hash(a), type=a.type,
-                              tier=risk.tier, outcome="approve", method="phone_tap")  # fmt: skip
-            ctx.complete_approved(a, token)
-
-        self.pending.add(action, risk.tier, on_approved=approved, on_denied=denied)
-        ctx.phone.request_approval(action.id, summary)
+    def _forward(self, name: str, data: dict[str, Any]) -> None:
+        """saysafe events -> the trace UI."""
+        events = self._events
+        if events is None:
+            return
+        if name == "voice_scored":
+            data = {**data, "owner_enrolled": self._turn.get("owner_enrolled", False),
+                    "speech_seconds": self._turn.get("speech_seconds", 0.0)}  # fmt: skip
+        if name == "decision" and self._turn.get("latency"):
+            latency = dict(self._turn["latency"])
+            latency["total"] = _ms(self._turn["start"])
+            data = {**data, "latency_ms_by_step": latency}
+        events.publish(_EVENT_NAMES.get(name, name), **data)
+        if name == "decision":
+            events.led(_LED[data["outcome"]])
 
 
-def _step_up_reason(
-    match: Match, wanted: str, band: str, reply: VerifyResult | None, enrolled: bool
-) -> str:
-    if not enrolled:
-        return "No owner voice enrolled"
-    if reply is None:
-        return "No voice to check (text reply)"
-    if reply.too_short:
-        return "Too little speech to check the voice"
-    if match.kind == "challenge_wrong":
-        return f"Wrong challenge word ({match.detail})"
-    if band != "accept":
-        return f"Voice didn't match the owner well enough ({band})"
-    return f"Reply wasn't a clear {'challenge word' if wanted == 'challenge_ok' else 'yes'}"
+def _room(ctx: TurnContext) -> tuple[Room, bool]:
+    from band_demo.privacy_hook import audience_state
+
+    state = audience_state(ctx)
+    return Room(state.level), state.headphones
 
 
 def _ms(t0: float) -> float:
     return round((time.perf_counter() - t0) * 1000, 1)
-
-
-def _r(x: float | None) -> float | None:
-    return None if x is None else round(x, 4)
 
 
 _approver: Approver | None = None

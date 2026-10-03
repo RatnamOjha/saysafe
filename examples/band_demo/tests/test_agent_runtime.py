@@ -24,9 +24,9 @@ def events():
 
 
 def _approve_all(action, ctx):
-    from band_demo.config import token_service as default_service
+    from band_demo.config import approvals
 
-    return ApprovalDecision("approve", default_service().issue(action, "test", "test", None))
+    return ApprovalDecision("approve", approvals().tokens.issue(action, "test", "test", None))
 
 
 @pytest.fixture
@@ -58,9 +58,9 @@ def test_executor_requires_token():
     a = MockAgent().order_usual()
     with pytest.raises(MissingApproval):
         Executor().run(a, None)
-    from band_demo.config import token_service as default_service
+    from band_demo.config import approvals
 
-    token = default_service().issue(a, "voice", "voice", 0.9)
+    token = approvals().tokens.issue(a, "voice", "voice", 0.9)
     assert "Order placed" in Executor().run(a, token).text
 
 
@@ -125,7 +125,7 @@ DEMO = [
 @pytest.mark.parametrize("text", DEMO)
 def test_every_demo_phrase_runs_end_to_end(pipeline, text):
     result = pipeline.run_text(text)
-    assert result.speak is not None and result.speak.spoken_text
+    assert result.speak is not None and result.speak.say
     if result.action is not None:
         assert result.decision.outcome == "approve"
         assert result.action in pipeline.executor.executed

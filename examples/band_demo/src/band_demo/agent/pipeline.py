@@ -22,11 +22,9 @@ from band_demo.agent.mock_agent import MockAgent, Reply
 from band_demo.approvals_hook import ApprovalDecision
 from band_demo.audio.stt import STT, get_stt
 from band_demo.audio.tts import TTS, get_tts
-from band_demo.privacy_hook import SpeakDecision
-from saysafe.approvals.actions import Action
+from saysafe import Action, PrivacyDecision
 from saysafe.privacy.audience import AudienceTracker
-from saysafe.voice.embed import Embedding, TooShort, embed
-from saysafe.voice.vad import StreamingVAD
+from saysafe.voice import Embedding, StreamingVAD, TooShort
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +56,7 @@ class TurnResult:
     action: Action | None = None
     decision: ApprovalDecision | None = None
     reply: Reply | None = None
-    speak: SpeakDecision | None = None
+    speak: PrivacyDecision | None = None
 
 
 def _never_listen(timeout_s: float) -> None:
@@ -76,7 +74,7 @@ class Pipeline:
         phone: PhoneChannel | None = None,
         events: EventBus = bus,
         listen: Listen = _never_listen,
-        embedder: Callable[[np.ndarray], Embedding] = embed,
+        embedder: Callable[[np.ndarray], Embedding] | None = None,
         audience: AudienceTracker | None = None,
     ):
         self.events = events
@@ -88,6 +86,10 @@ class Pipeline:
         self.headphones = HeadphonesChannel(self.tts, events)
         self.phone = phone or PhoneChannel(events)
         self.listen = listen
+        if embedder is None:
+            from band_demo.owner import embed_command
+
+            embedder = embed_command
         self.embedder = embedder
         self.flags = {"headphones": False, "discreet_mode": False}
         self.audience = audience
@@ -100,14 +102,11 @@ class Pipeline:
 
     def warm(self) -> None:
         """Load and run every model once so the first real turn isn't slow."""
-        from saysafe.voice import vad
-        from saysafe.voice.embed import _encoder
+        from band_demo.owner import VOICE
 
-        silence = np.zeros(16000, dtype=np.float32)
-        self.stt.transcribe(silence)
-        vad.segments(silence)
+        self.stt.transcribe(np.zeros(16000, dtype=np.float32))
         self.tts.synthesize("ready")
-        _encoder()
+        VOICE.warm()
 
     # entry points
 
@@ -207,19 +206,19 @@ class Pipeline:
         self.events.publish("executed", action_id=action.id, action_type=action.type)
         return reply
 
-    def _deliver(self, reply: Reply, ctx: TurnContext) -> SpeakDecision:
+    def _deliver(self, reply: Reply, ctx: TurnContext) -> PrivacyDecision:
         try:
             d = privacy_hook.before_speak(reply, ctx)
         except Exception:
             log.exception("before_speak crashed; sending to the phone only")
             self.events.publish("hook_error", hook="before_speak")
-            d = SpeakDecision("phone_only", "I sent it to your phone.", reply.text)
-        self.events.publish("route", channel=d.channel, spoken=d.spoken_text, phone=d.phone_text)
+            d = PrivacyDecision("I sent it to your phone.", reply.text, "phone_only", "secret")
+        self.events.publish("route", channel=d.channel, spoken=d.say, phone=d.send_to_phone)
         out = self.headphones if d.channel == "headphones_full" else self.speaker
-        if d.spoken_text:
-            out.deliver(d.spoken_text, d.volume)
-        if d.phone_text:
-            self.phone.notify(d.phone_text)
+        if d.say:
+            out.deliver(d.say, d.volume)
+        if d.send_to_phone:
+            self.phone.notify(d.send_to_phone)
         return d
 
 

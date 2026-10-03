@@ -40,14 +40,12 @@ def isolated(tmp_path, monkeypatch):
     if HAS_DEMO:
         from band_demo import approvals_hook, config
 
-        config.token_service.cache_clear()
-        config.pending.cache_clear()
+        config.approvals.cache_clear()
         monkeypatch.setattr(approvals_hook, "_approver", None)
     _drop_unloadable_lazy_modules()
     yield
     if HAS_DEMO:
-        config.token_service.cache_clear()
-        config.pending.cache_clear()
+        config.approvals.cache_clear()
 
 
 @pytest.fixture(scope="session")

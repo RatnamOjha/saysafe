@@ -20,6 +20,7 @@ ROOT = BENCH.parent
 RESULTS = BENCH / "results"
 README = ROOT / "README.md"
 START, END = "<!-- results:start -->", "<!-- results:end -->"
+GITHUB = "https://github.com/RatnamOjha/saysafe/blob/main/"  # absolute: PyPI shows the README too
 
 
 def run(script: str, *args: str) -> None:
@@ -125,7 +126,7 @@ def readme_block(latency: dict, voice: dict | None, privacy: dict) -> str:
             if voice else "")  # fmt: skip
     return "\n".join([START, "", "| Result | Value |", "|---|---|", *rows, "",
                       f"{note}Details and caveats: [bench/results/BENCHMARKS.md]"
-                      "(bench/results/BENCHMARKS.md). Rerun with `make bench`.", "", END])  # fmt: skip
+                      f"({GITHUB}bench/results/BENCHMARKS.md). Rerun with `make bench`.", "", END])  # fmt: skip
 
 
 def main() -> int:

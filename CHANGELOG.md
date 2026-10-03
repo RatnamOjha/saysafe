@@ -4,6 +4,10 @@ All notable changes to saysafe. The format follows [Keep a Changelog](https://ke
 
 ## Unreleased
 
+## [0.1.0] - 2026-10-03
+
+First release.
+
 ### Added
 - `PrivacyGuard.check(text, sources=, room=, headphones=, discreet=, context=)`: what to say out loud and what to send to the phone, from rules only (no models, no network). Optional LLM `classifier=` and `smoother=`.
 - `Room`: who may hear, set from device state or from `AudienceTracker.room()`.

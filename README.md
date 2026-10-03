@@ -11,12 +11,10 @@ saysafe never touches the mic or the speaker. Your app passes text (and, optiona
 
 ## Install
 
-Not on PyPI yet. Until then, from a clone:
-
 ```bash
-pip install .                # core: Python 3.10+, four dependencies, no torch
-pip install ".[pipecat]"     # Pipecat step (Pipecat needs Python 3.11+)
-pip install ".[voice]"       # voice ID: torch (CPU), speechbrain
+pip install saysafe                # core: Python 3.10+, four dependencies, no torch
+pip install "saysafe[pipecat]"     # Pipecat step (Pipecat needs Python 3.11+)
+pip install "saysafe[voice]"       # voice ID: torch (CPU), speechbrain
 ```
 
 ## 1. Keep private replies off the speaker
@@ -78,7 +76,7 @@ if step.status == "awaiting_phone":
 approvals.verify(step.token, action)
 ```
 
-How much proof each action needs comes from a policy. The [default](src/saysafe/data/policy.yaml) is a starting point. Write your own as a dict or YAML file:
+How much proof each action needs comes from a policy. The [default](https://github.com/RatnamOjha/saysafe/blob/main/src/saysafe/data/policy.yaml) is a starting point. Write your own as a dict or YAML file:
 
 ```python
 approvals = ApprovalGuard(secret, policy={"rules": [
@@ -137,7 +135,7 @@ privacy.headphones = True
 
 Sentences stream straight through while the room may hear them, so ordinary replies aren't slower. A sentence that may not, or that contains a number, is held, and the rest of the reply is decided in one go. Alone or in headphones nothing is held. If `send_to_phone` raises, it says it couldn't reach the phone instead of reading the reply out.
 
-A real run of [examples/pipecat_privacy.py](examples/pipecat_privacy.py) (Groq, fake tool data; the LLM's wording varies between runs):
+A real run of [examples/pipecat_privacy.py](https://github.com/RatnamOjha/saysafe/blob/main/examples/pipecat_privacy.py) (Groq, fake tool data; the LLM's wording varies between runs):
 
 ```
 Room: OTHERS_PRESENT
@@ -153,7 +151,7 @@ Room: OTHERS_PRESENT
 
 ## Optional LLM layers
 
-Rules catch the patterns they know ([sensitivity.yaml](src/saysafe/data/sensitivity.yaml)). Plug in any LLM for more:
+Rules catch the patterns they know ([sensitivity.yaml](https://github.com/RatnamOjha/saysafe/blob/main/src/saysafe/data/sensitivity.yaml)). Plug in any LLM for more:
 
 ```python
 from saysafe.privacy.detect import CLASSIFIER_PROMPT, Verdict
@@ -174,11 +172,11 @@ If the classifier fails and no rule fired, the reply counts as personal, never p
 - Amounts are read back in dollars only, for now.
 - It doesn't make a product PCI or HIPAA compliant.
 
-The full list, with what each defense leaves to you, is in [THREAT_MODEL.md](THREAT_MODEL.md).
+The full list, with what each defense leaves to you, is in [THREAT_MODEL.md](https://github.com/RatnamOjha/saysafe/blob/main/THREAT_MODEL.md).
 
 ## Status
 
-Alpha (0.1, not yet released). The APIs above are what 0.1 will ship. The private-reply benchmark is waiting on reviewed labels; the rest are below.
+Alpha. 0.1 is the first release; the API may still change before 1.0. The private-reply benchmark is waiting on reviewed labels; the rest are below.
 
 ## Results
 
@@ -186,13 +184,13 @@ Alpha (0.1, not yet released). The APIs above are what 0.1 will ship. The privat
 
 | Result | Value |
 |---|---|
-| Privacy check, per reply (p50 / p95) | 0.053 / 0.206 ms on Apple M3 |
+| Privacy check, per reply (p50 / p95) | 0.053 / 0.208 ms on Apple M3 |
 | Voice ID equal error rate, 3 s / 0.5 s of speech | 0.4% / 5.9% |
 | Strangers approved by voice, end to end (packaged thresholds, 1 s reply) | 0 of 760 (0%) |
 | Owner approved without a phone tap (same) | 151 of 160 (94.4%) |
 | Private-reply accuracy | not measured yet (0 of 140 labels reviewed) |
 
-Voice numbers are on LibriSpeech (clean read speech), close to the best case. Details and caveats: [bench/results/BENCHMARKS.md](bench/results/BENCHMARKS.md). Rerun with `make bench`.
+Voice numbers are on LibriSpeech (clean read speech), close to the best case. Details and caveats: [bench/results/BENCHMARKS.md](https://github.com/RatnamOjha/saysafe/blob/main/bench/results/BENCHMARKS.md). Rerun with `make bench`.
 
 <!-- results:end -->
 
@@ -204,6 +202,6 @@ uv run pytest -m "not models"
 uv run band-demo chat --room others   # the wearable simulator in examples/band_demo
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](https://github.com/RatnamOjha/saysafe/blob/main/CONTRIBUTING.md). Security reports: [SECURITY.md](https://github.com/RatnamOjha/saysafe/blob/main/SECURITY.md).
 
 Apache-2.0. Independent project by Ratnam Ojha.

@@ -18,6 +18,15 @@ from saysafe.privacy.detect import Detection, Level, Span, detect
 FALLBACK = "Got it. I sent the details to your phone."
 DETAILS = "Details are on your phone."
 
+
+def fallback_line(screen: str = "phone") -> str:
+    return f"Got it. I sent the details to your {screen}."
+
+
+def details_line(screen: str = "phone") -> str:
+    return f"Details are on your {screen}."
+
+
 _PLACEHOLDER = {
     "otp_code": "your code",
     "password": "your password",
@@ -50,7 +59,7 @@ class Rewrite:
     reasons: list[str]
 
 
-def span_rewrite(text: str, spans: list[Span]) -> str:
+def span_rewrite(text: str, spans: list[Span], screen: str = "phone") -> str:
     out = text
     for s in sorted(spans, key=lambda s: s.start, reverse=True):
         before, after = out[: s.start], out[s.end :]
@@ -66,7 +75,7 @@ def span_rewrite(text: str, spans: list[Span]) -> str:
             continue
         repl = _PLACEHOLDER.get(s.category, "that")
         if repl and re.search(r"\b(?:is|are|was|:)\s*$", before, re.I):
-            repl = "on your phone"
+            repl = f"on your {screen}"
         if not repl:
             after = after.lstrip()
             next_word = re.match(r"[a-z]+", after.lower())
@@ -84,21 +93,21 @@ def _tidy(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def with_details(text: str) -> str:
-    if "on your phone" in text.lower():
+def with_details(text: str, screen: str = "phone") -> str:
+    if f"on your {screen}".lower() in text.lower():
         return text
-    return f"{text.rstrip()} {DETAILS}"
+    return f"{text.rstrip()} {details_line(screen)}"
 
 
 # Called with (redacted text, substrings that must not appear); returns smoother text or None.
 Smoother = Callable[[str, list[str]], "str | None"]
 
 
-def smoother_prompt(forbidden: list[str]) -> str:
+def smoother_prompt(forbidden: list[str], screen: str = "phone") -> str:
     """A system prompt that works well for an LLM smoother."""
     return (
         "Rewrite this assistant reply so it sounds natural when spoken, keeping its meaning. "
-        "It has been redacted; the full details are on the user's phone. Never include any "
+        f"It has been redacted; the full details are on the user's {screen}. Never include any "
         f"of these strings or their values: {forbidden}. Keep it under 20 words."
     )
 
@@ -108,17 +117,20 @@ def rewrite(
     detection: Detection,
     speakable: Callable[[Level], bool],
     smoother: Smoother | None = None,
+    screen: str = "phone",
 ) -> Rewrite:
-    """speakable(level) says whether a reply of that level may be spoken to this audience."""
+    """speakable(level) says whether a reply of that level may be spoken to this audience.
+    screen: where the full reply goes ("phone", "watch", "app")."""
     reasons: list[str] = []
     forbidden = [s.text for s in detection.spans]
+    fallback = fallback_line(screen)
     if not detection.spans:
-        return Rewrite(FALLBACK, "fallback", ["Nothing specific to redact"])
+        return Rewrite(fallback, "fallback", ["Nothing specific to redact"])
 
-    redacted = span_rewrite(text, detection.spans)
+    redacted = span_rewrite(text, detection.spans, screen)
     if redacted == _UNFIXABLE:
-        return Rewrite(FALLBACK, "fallback", ["Couldn't redact without breaking the sentence"])
-    candidate, step = with_details(redacted), "span"
+        return Rewrite(fallback, "fallback", ["Couldn't redact without breaking the sentence"])
+    candidate, step = with_details(redacted, screen), "span"
     if smoother is not None:
         smoothed = smoother(candidate, forbidden)
         if smoothed:
@@ -128,10 +140,10 @@ def rewrite(
 
     lowered = candidate.lower()
     if any(f.lower() in lowered for f in forbidden if f):
-        return Rewrite(FALLBACK, "fallback", [*reasons, "A flagged span survived the rewrite"])
+        return Rewrite(fallback, "fallback", [*reasons, "A flagged span survived the rewrite"])
     recheck = detect(candidate)  # no source tags: judge only the words being spoken
     if not speakable(recheck.level):
-        return Rewrite(FALLBACK, "fallback", [*reasons, f"Rewrite still {recheck.level}"])
-    if _BROKEN.search(candidate.replace(DETAILS, "")):
-        return Rewrite(FALLBACK, "fallback", [*reasons, "Rewrite didn't read cleanly"])
+        return Rewrite(fallback, "fallback", [*reasons, f"Rewrite still {recheck.level}"])
+    if _BROKEN.search(candidate.replace(details_line(screen), "")):
+        return Rewrite(fallback, "fallback", [*reasons, "Rewrite didn't read cleanly"])
     return Rewrite(candidate, step, reasons)

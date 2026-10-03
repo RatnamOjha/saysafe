@@ -88,4 +88,4 @@ def match_response(
 
     if m := _AFFIRM.search(t):
         return Match("affirm", f"heard {m.group(0)!r}")
-    return Match("unclear", f"no yes, no, or challenge word in {t!r}")
+    return Match("unclear", "no yes, no, or challenge word")  # never echo the transcript

@@ -48,6 +48,7 @@ class PrivacyDecision:
     rule: str = ""  # which rule or routing table cell fired
     rewrite: str | None = None  # span | llm | fallback, when the reply was rewritten
     latency_ms: dict[str, float] = field(default_factory=dict)
+    volume: float = 1.0  # lower when the user whispered
 
     @property
     def withheld(self) -> bool:
@@ -60,12 +61,21 @@ class PrivacyGuard:
 
     classifier: optional extra detection layer, e.g. an LLM (see detect.CLASSIFIER_PROMPT).
     smoother: optional rewriter that makes redacted replies sound natural
-    (see rewrite.smoother_prompt).
+        (see rewrite.smoother_prompt).
+    screen: where private replies go, as the user would say it: "phone", "watch", "app".
+        The host delivers send_to_phone there; the spoken lines name it.
     """
 
-    def __init__(self, classifier: Classifier | None = None, smoother: Smoother | None = None):
+    def __init__(
+        self,
+        classifier: Classifier | None = None,
+        smoother: Smoother | None = None,
+        *,
+        screen: str = "phone",
+    ):
         self.classifier = classifier
         self.smoother = smoother
+        self.screen = screen
 
     def check(
         self,
@@ -104,7 +114,8 @@ class PrivacyGuard:
             discreet_mode=discreet,
             evidence=evidence,
         )
-        r = route(text, detection, state, "whisper" if whisper else "normal", self.smoother)
+        style = "whisper" if whisper else "normal"
+        r = route(text, detection, state, style, self.smoother, self.screen)
         return PrivacyDecision(
             say=r.spoken_text or "",
             send_to_phone=r.phone_text,
@@ -116,6 +127,7 @@ class PrivacyGuard:
             rule=r.rule_cell,
             rewrite=r.rewrite_step,
             latency_ms=dict(detection.latency_ms),
+            volume=r.volume,
         )
 
     def says_as_is(

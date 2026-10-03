@@ -13,22 +13,28 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ActionType = Literal[
+# Types the packaged policy and read-backs know about. Any other snake_case type works
+# too ("unlock_door", "refund"); write policy rules for it, or it needs a phone tap.
+KNOWN_TYPES = (
     "order_food",
     "send_money",
     "cancel_subscription",
     "book_appointment",
     "send_email",
     "set_reminder",
-]
+)
 Source = Literal["user_voice", "agent_initiated", "from_content"]
 
 
 class Action(BaseModel):
+    """Something the agent wants to do. source: user_voice (the owner asked for it),
+    agent_initiated (the assistant suggested it) or from_content (an email, a web page
+    or a message asked for it); the last two need one more tier of proof."""
+
     model_config = ConfigDict(frozen=True)
 
     id: str = Field(default_factory=lambda: uuid4().hex[:12])
-    type: ActionType
+    type: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
     counterparty: str | None = None
     amount: Decimal | None = None
     currency: Literal["USD"] = "USD"

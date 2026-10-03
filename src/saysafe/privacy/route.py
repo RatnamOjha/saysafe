@@ -53,6 +53,7 @@ def route(
     audience: AudienceState,
     voice_style: VoiceStyle = "normal",
     smoother: Smoother | None = None,
+    screen: str = "phone",
 ) -> SpeakDecision:
     volume = WHISPER_VOLUME if voice_style == "whisper" else 1.0
     level = detection.level
@@ -69,7 +70,7 @@ def route(
                                  "discreet:public")  # fmt: skip
         # nothing personal or above is spoken, so only public rewrites pass
         return _redacted(
-            text, detection, volume, [why], "discreet", lambda lv: lv == "public", smoother
+            text, detection, volume, [why], "discreet", lambda lv: lv == "public", smoother, screen
         )
 
     cell = table_cell(level, audience.level)
@@ -79,16 +80,23 @@ def route(
     if channel == "speak_full":
         return SpeakDecision(channel, text, None, volume, reasons, rule_cell)
     if channel == "phone_only":
-        return SpeakDecision(channel, PHONE_ONLY_LINE, text, volume, reasons, rule_cell)
+        line = phone_only_line(screen)
+        return SpeakDecision(channel, line, text, volume, reasons, rule_cell)
 
     def speakable(lv: Level) -> bool:
         return table_cell(lv, audience.level) == "speak"
 
-    return _redacted(text, detection, volume, reasons, rule_cell, speakable, smoother)
+    return _redacted(text, detection, volume, reasons, rule_cell, speakable, smoother, screen)
 
 
-def _redacted(text, detection, volume, reasons, rule_cell, speakable, smoother) -> SpeakDecision:
-    r = rewrite(text, detection, speakable, smoother)
+def phone_only_line(screen: str = "phone") -> str:
+    return f"I sent it to your {screen}."
+
+
+def _redacted(
+    text, detection, volume, reasons, rule_cell, speakable, smoother, screen="phone"
+) -> SpeakDecision:
+    r = rewrite(text, detection, speakable, smoother, screen)
     return SpeakDecision(
         "speak_redacted_and_phone", r.text, text, volume, [*reasons, *r.reasons], rule_cell,
         rewrite_step=r.step,

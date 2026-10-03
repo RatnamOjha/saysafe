@@ -58,14 +58,19 @@ PhoneSender = Callable[[str], "Awaitable[None] | None"]
 
 PHONE_FAILED_LINE = "I couldn't send that to your phone, and I can't say it out loud here."
 
+
+def failed_line(screen: str = "phone") -> str:
+    return f"I couldn't send that to your {screen}, and I can't say it out loud here."
+
+
 _DIGIT = re.compile(r"\d")
 
 
 class PrivacyFilter(FrameProcessor):
     """Checks LLM replies and TTSSpeakFrames before TTS.
 
-    send_to_phone: delivers withheld replies privately. Required, because the spoken line
-        says "I sent it to your phone"; if it raises, PHONE_FAILED_LINE is said instead.
+    send_to_phone: delivers withheld replies privately (to guard.screen). Required, because
+        the spoken line says "I sent it to your phone"; if it raises, failed_line() is said.
     guard: a PrivacyGuard, e.g. with an LLM classifier; rules only by default.
     room / headphones: values, or zero-argument callables read for every sentence
         (e.g. room=tracker.room). Set the attributes any time.
@@ -193,5 +198,5 @@ class PrivacyFilter(FrameProcessor):
                 await result
         except Exception as e:  # anything failing means nothing reached the phone
             log.warning("send_to_phone failed (%s); the reply stays private", type(e).__name__)
-            return PHONE_FAILED_LINE
+            return failed_line(self.guard.screen)
         return decision.say

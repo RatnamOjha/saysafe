@@ -74,10 +74,13 @@ def _body(a: Action) -> list[str]:
     if a.type == "set_reminder":
         when = a.params.get("when")
         return [f"Reminder: {a.params.get('what', '')}{' at ' + when if when else ''}."]
-    return [f"{a.type.replace('_', ' ').capitalize()}."]
+    # any other action type: "Unlock door: front door." / "Refund: Jake, fifty dollars."
+    what = a.type.replace("_", " ").capitalize()
+    details = ", ".join(p for p in (who, money, a.destination) if p)
+    return [f"{what}: {details}." if details else f"{what}."]
 
 
-def _instruction(tier: str, challenge_word: str | None) -> str:
+def _instruction(tier: str, challenge_word: str | None, screen: str = "phone") -> str:
     if tier == "voice":
         return "Say yes."
     if tier == "voice_challenge":
@@ -85,7 +88,7 @@ def _instruction(tier: str, challenge_word: str | None) -> str:
             raise ValueError("voice_challenge read-back needs a challenge word")
         return f"Say '{challenge_word}' to confirm."
     if tier == "phone_tap":
-        return "Check your phone to approve."
+        return f"Check your {screen} to approve."
     return ""
 
 
@@ -100,5 +103,11 @@ def summary(action: Action) -> str:
     return body
 
 
-def readback(action: Action, risk: RiskAssessment, challenge_word: str | None = None) -> Readback:
-    return Readback(summary(action), _instruction(risk.tier, challenge_word))
+def readback(
+    action: Action,
+    risk: RiskAssessment,
+    challenge_word: str | None = None,
+    screen: str = "phone",
+) -> Readback:
+    """screen: what the user approves on ("phone", "watch", "app")."""
+    return Readback(summary(action), _instruction(risk.tier, challenge_word, screen))

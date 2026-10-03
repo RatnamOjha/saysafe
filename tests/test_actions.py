@@ -1,12 +1,12 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
-from earshot.approvals.actions import Action, action_hash, canonical_json
+from saysafe.approvals.actions import Action, action_hash, canonical_json
 
-FIXED = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
+FIXED = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
 
 
 def _action(**kw) -> Action:
@@ -37,7 +37,7 @@ def test_amount_normalized_to_cents():
         ("id", "a2"), ("type", "order_food"), ("counterparty", "Priya"),
         ("amount", Decimal("50.01")), ("destination", "@evil"), ("is_new_counterparty", True),
         ("source", "from_content"), ("params", {"note": "dinner", "split": 3}),
-        ("created_at", datetime(2026, 9, 26, 12, 0, 1, tzinfo=UTC)),
+        ("created_at", datetime(2026, 9, 26, 12, 0, 1, tzinfo=timezone.utc)),
     ],
 )  # fmt: skip
 def test_hash_changes_when_any_field_changes(field, value):

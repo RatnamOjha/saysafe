@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from earshot.privacy.audience import AudienceTracker
+from saysafe.privacy.audience import AudienceTracker
 
 
 class Clock:

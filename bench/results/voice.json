@@ -1,0 +1,162 @@
+{
+  "generated": "2026-10-03 17:50 UTC",
+  "data": "LibriSpeech test-clean (CC BY 4.0), 40 speakers, 3 enrollment + 8 test utterances each, seed 7",
+  "model": "speechbrain/spkrec-ecapa-voxceleb + Silero VAD, CPU",
+  "machine": "Apple M3",
+  "python": "3.11.13",
+  "per_cut": [
+    {
+      "speech_s": 0.5,
+      "genuine_trials": 320,
+      "impostor_trials": 12480,
+      "no_score": {
+        "count": 0,
+        "n": 12800,
+        "rate": 0.0
+      },
+      "eer": 0.0594,
+      "owner_accepted_at_packaged": {
+        "count": 68,
+        "n": 320,
+        "rate": 0.2125
+      },
+      "stranger_accepted_at_packaged": {
+        "count": 0,
+        "n": 12480,
+        "rate": 0.0
+      },
+      "score_ms_p50": 10.9
+    },
+    {
+      "speech_s": 1.0,
+      "genuine_trials": 320,
+      "impostor_trials": 12480,
+      "no_score": {
+        "count": 40,
+        "n": 12800,
+        "rate": 0.0031
+      },
+      "eer": 0.0157,
+      "owner_accepted_at_packaged": {
+        "count": 235,
+        "n": 320,
+        "rate": 0.7344
+      },
+      "stranger_accepted_at_packaged": {
+        "count": 1,
+        "n": 12480,
+        "rate": 0.0001
+      },
+      "score_ms_p50": 16.1
+    },
+    {
+      "speech_s": 2.0,
+      "genuine_trials": 320,
+      "impostor_trials": 12480,
+      "no_score": {
+        "count": 0,
+        "n": 12800,
+        "rate": 0.0
+      },
+      "eer": 0.0063,
+      "owner_accepted_at_packaged": {
+        "count": 308,
+        "n": 320,
+        "rate": 0.9625
+      },
+      "stranger_accepted_at_packaged": {
+        "count": 1,
+        "n": 12480,
+        "rate": 0.0001
+      },
+      "score_ms_p50": 26.0
+    },
+    {
+      "speech_s": 3.0,
+      "genuine_trials": 320,
+      "impostor_trials": 12480,
+      "no_score": {
+        "count": 0,
+        "n": 12800,
+        "rate": 0.0
+      },
+      "eer": 0.0038,
+      "owner_accepted_at_packaged": {
+        "count": 315,
+        "n": 320,
+        "rate": 0.9844
+      },
+      "stranger_accepted_at_packaged": {
+        "count": 2,
+        "n": 12480,
+        "rate": 0.0002
+      },
+      "score_ms_p50": 36.0
+    }
+  ],
+  "calibrated_on": "20 dev speakers, 1.0 s cuts (159 owner, 3021 stranger scores)",
+  "calibrated": {
+    "t_accept": 0.293,
+    "t_reject": 0.201
+  },
+  "end_to_end_on": "20 other speakers, voice tier, reply 'yes', command 3.0 s, both from the same person",
+  "end_to_end": {
+    "packaged, reply 0.5 s": {
+      "t_accept": 0.45,
+      "t_reject": 0.25,
+      "owner_approved": {
+        "count": 126,
+        "n": 160,
+        "rate": 0.7875
+      },
+      "stranger_approved": {
+        "count": 0,
+        "n": 760,
+        "rate": 0.0
+      }
+    },
+    "packaged, reply 1.0 s": {
+      "t_accept": 0.45,
+      "t_reject": 0.25,
+      "owner_approved": {
+        "count": 151,
+        "n": 160,
+        "rate": 0.9437
+      },
+      "stranger_approved": {
+        "count": 0,
+        "n": 760,
+        "rate": 0.0
+      }
+    },
+    "calibrated, reply 0.5 s": {
+      "t_accept": 0.293,
+      "t_reject": 0.201,
+      "owner_approved": {
+        "count": 147,
+        "n": 160,
+        "rate": 0.9187
+      },
+      "stranger_approved": {
+        "count": 0,
+        "n": 760,
+        "rate": 0.0
+      }
+    },
+    "calibrated, reply 1.0 s": {
+      "t_accept": 0.293,
+      "t_reject": 0.201,
+      "owner_approved": {
+        "count": 159,
+        "n": 160,
+        "rate": 0.9938
+      },
+      "stranger_approved": {
+        "count": 2,
+        "n": 760,
+        "rate": 0.0026
+      }
+    }
+  },
+  "runtime_s": 48.4
+}

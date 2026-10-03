@@ -18,10 +18,11 @@ import sys
 
 import numpy as np
 from _common import VOICES, read_manifest, write_manifest
+from band_demo.audio import capture
 
-from earshot.audio import capture, vad
-from earshot.audio.io import SR, rms_dbfs, save_wav
-from earshot.config import CONFIG_DIR
+from saysafe.approvals.challenge import words as challenge_pool
+from saysafe.voice import vad
+from saysafe.voice.io import SR, rms_dbfs, save_wav
 
 CONSENT = (
     "This records about 30 short clips of your voice to test a voice-approval prototype.\n"
@@ -47,8 +48,7 @@ MIN_SPEECH_S = 0.25  # below this we assume nobody spoke and record again
 
 
 def challenge_words(k: int) -> list[str]:
-    lines = (CONFIG_DIR / "challenge_words.txt").read_text().splitlines()
-    pool = [w.strip() for w in lines if w.strip() and not w.startswith("#")]
+    pool = list(challenge_pool())
     return [pool.pop(secrets.randbelow(len(pool))) for _ in range(k)]
 
 

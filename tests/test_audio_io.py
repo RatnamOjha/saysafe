@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from earshot.audio import io
-from tests.conftest import sine
+from saysafe.voice import io
+from tests.helpers import sine
 
 
 def test_wav_roundtrip(tmp_path):

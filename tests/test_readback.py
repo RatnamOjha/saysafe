@@ -2,9 +2,31 @@ from decimal import Decimal
 
 import pytest
 
-from earshot.approvals.policy import assess
-from earshot.approvals.readback import MAX_BODY_WORDS, money_words, readback
-from earshot.cli import demo_actions
+from saysafe.approvals.actions import Action
+from saysafe.approvals.policy import assess
+from saysafe.approvals.readback import MAX_BODY_WORDS, money_words, readback
+
+
+def demo_actions():
+    """The demo's actions, built directly so the library tests don't need the demo."""
+    order = Action(type="order_food", counterparty="DoorDash", amount=Decimal("43.20"),
+                   destination="home", params={"eta": "7:40"})  # fmt: skip
+    jake = Action(type="send_money", counterparty="Jake", amount=Decimal("50"),
+                  destination="@jake-morales")  # fmt: skip
+    netflix = Action(type="cancel_subscription", counterparty="Netflix",
+                     amount=Decimal("15.49"), params={"renews": "October 3"})  # fmt: skip
+    return [
+        ("order my usual", order),
+        ("send fifty dollars to Jake", jake),
+        ("send twenty dollars to Priya", Action(type="send_money", counterparty="Priya",
+                                                amount=Decimal("20"), is_new_counterparty=True)),
+        ("cancel my Netflix", netflix),
+        ("set a reminder to call mom at six",
+         Action(type="set_reminder", params={"what": "call mom", "when": "six"})),
+        ("big order ($80)", order.model_copy(update={"amount": Decimal("80")})),
+        ("send $250 to Jake", jake.model_copy(update={"amount": Decimal("250")})),
+        ("email says: cancel Netflix", netflix.model_copy(update={"source": "from_content"})),
+    ]  # fmt: skip
 
 
 @pytest.mark.parametrize(
@@ -52,3 +74,18 @@ def test_long_body_is_capped():
     action = dict(demo_actions())["set a reminder to call mom at six"]
     long = action.model_copy(update={"params": {"what": " ".join(["word"] * 30), "when": "six"}})
     assert readback(long, assess(long)).body_words <= MAX_BODY_WORDS
+
+
+@pytest.mark.parametrize(
+    "n, words",
+    [
+        (0, "zero"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (43, "forty-three"),
+        (100, "one hundred"), (120, "one hundred twenty"), (1500, "one thousand five hundred"),
+        (2412, "two thousand four hundred twelve"), (1_000_000, "one million"),
+        (5_000_042, "five million forty-two"), (-3, "minus three"),
+    ],
+)  # fmt: skip
+def test_number_words(n, words):
+    from saysafe.approvals.numwords import number_words
+
+    assert number_words(n) == words

@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from earshot.config import cache_dir  # noqa: E402
+from band_demo.config import cache_dir  # noqa: E402
 
 CACHE = cache_dir()
 PIPER_VOICE = "en_US-lessac-medium"

@@ -6,7 +6,20 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --python 3.11 --no-default-groups --group lint --extra pipecat
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync mypy
+
   test:
+    # Everything: the library, the Pipecat step and the band demo.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,6 +28,64 @@ jobs:
           enable-cache: true
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libportaudio2
       - run: uv sync --python 3.11
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
       - run: uv run pytest -m "not models"
+
+  library:
+    # The library as users install it, on every supported Python and both OSes.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv venv --python ${{ matrix.python }} .lib
+      - name: CPU-only torch on Linux
+        if: runner.os == 'Linux'
+        run: uv pip install --python .lib/bin/python torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: uv pip install --python .lib/bin/python ".[voice,pipecat]" pytest pytest-asyncio hypothesis
+      - run: .lib/bin/python -m pytest tests -m "not models" -p no:cacheprovider
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - name: Wheel has the data files and py.typed
+        run: |
+          unzip -l dist/*.whl > files.txt
+          for f in saysafe/py.typed saysafe/data/policy.yaml saysafe/data/sensitivity.yaml \
+                   saysafe/data/routing.yaml saysafe/data/challenge_words.txt; do
+            grep -q "$f" files.txt || { echo "missing $f"; exit 1; }
+          done
+          ! grep -q "band_demo" files.txt
+
+  core-only:
+    # The core must install and work without torch or any model, on the oldest Python we support.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python 3.10 .core
+      - run: uv pip install --python .core/bin/python .
+      - run: |
+          .core/bin/python - <<'PY'
+          import importlib.util
+          assert importlib.util.find_spec("torch") is None, "core pulled in torch"
+          from saysafe import PrivacyGuard, Room
+          d = PrivacyGuard().check("Your Chase code is 482913.", room=Room.OTHERS_PRESENT)
+          assert d.channel == "phone_only" and "482913" not in d.say, d
+          try:
+              import saysafe.integrations.pipecat  # noqa: F401
+          except ImportError as e:
+              assert "saysafe[pipecat]" in str(e), e
+          else:
+              raise AssertionError("pipecat step imported without pipecat")
+          print("core ok:", d.channel)
+          PY

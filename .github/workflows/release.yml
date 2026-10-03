@@ -1,0 +1,110 @@
+name: release
+
+# Push a tag like v0.1.0 to release. Builds once, publishes to TestPyPI, installs it from
+# there and runs a smoke test, then publishes to PyPI and makes a GitHub release.
+# One-time setup is in RELEASING.md (trusted publishers, the two environments).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - id: version
+        name: Tag matches saysafe.__version__
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/saysafe/__init__.py)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no [$version] section"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  smoke:
+    # Install what TestPyPI serves, in a clean environment, on the oldest supported Python.
+    needs: [build, testpypi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: astral-sh/setup-uv@v6
+      - name: Install from TestPyPI (dependencies from PyPI)
+        run: |
+          uv venv --python 3.10 .smoke
+          for i in 1 2 3 4 5 6; do
+            uv pip install --python .smoke/bin/python --index-url https://test.pypi.org/simple/ \
+              --extra-index-url https://pypi.org/simple/ --index-strategy unsafe-best-match \
+              "saysafe==${{ needs.build.outputs.version }}" && break
+            sleep 20  # TestPyPI can take a moment to serve a new upload
+          done
+      - run: |
+          .smoke/bin/python - <<'PY'
+          import secrets
+          from saysafe import Action, ApprovalGuard, PrivacyGuard, Room
+          d = PrivacyGuard().check("Your Chase code is 482913.", room=Room.OTHERS_PRESENT)
+          assert d.channel == "phone_only" and "482913" not in d.say, d
+          g = ApprovalGuard(secrets.token_bytes(32))
+          step = g.start(Action(type="set_reminder"))
+          g.verify(step.token, step.action)
+          print("smoke ok")
+          PY
+
+  pypi:
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment: pypi  # add a required reviewer to this environment for a final manual check
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: [build, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${{ needs.build.outputs.version }}" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}' CHANGELOG.md > notes.md
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "saysafe $GITHUB_REF_NAME" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

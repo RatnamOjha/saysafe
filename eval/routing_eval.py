@@ -11,20 +11,20 @@ where the agent tags data where it's fetched.
 
 import argparse
 import json
-import os
 import sys
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import yaml
 from _common import DATA, REPORTS
+from band_demo import privacy_llm
 
-from earshot.privacy.audience import AudienceState
-from earshot.privacy.detect import detect, rank
-from earshot.privacy.route import route
+from saysafe.privacy.audience import AudienceState
+from saysafe.privacy.detect import detect, rank
+from saysafe.privacy.route import route
 
 PATH = DATA / "replies.yaml"
 AUDIENCES = ("alone_likely", "unknown", "others_present")
@@ -44,10 +44,7 @@ def rate(k: int, n: int) -> dict:
 
 
 def evaluate(items: list[dict], use_llm: bool, pace_s: float) -> dict:
-    if use_llm:
-        os.environ["EARSHOT_DETECT_LLM"] = "1"
-    else:
-        os.environ.pop("EARSHOT_DETECT_LLM", None)
+    classifier = privacy_llm.classify if use_llm else None
 
     plain = [i for i in items if not i.get("injection")]
     inj = [i for i in items if i.get("injection")]
@@ -60,7 +57,7 @@ def evaluate(items: list[dict], use_llm: bool, pace_s: float) -> dict:
     def run_detect(text: str):
         nonlocal llm_failures
         t0 = time.perf_counter()
-        d = detect(text)
+        d = detect(text, classifier=classifier)
         latencies.append((time.perf_counter() - t0) * 1000)
         if use_llm:
             if "llm_unavailable" in d.categories or "llm" not in d.latency_ms:
@@ -220,7 +217,7 @@ def main() -> int:
         print("rules + LLM (paced for the free tier's rate limit)...", flush=True)
         modes.append(evaluate(use, True, args.pace))
     report = {
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "dry_run": args.unreviewed,
         "n_reviewed": len(use),
         "n_injection": sum(bool(i.get("injection")) for i in use),

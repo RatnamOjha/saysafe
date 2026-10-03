@@ -1,55 +1,85 @@
 [project]
-name = "earshot"
-version = "0.1.0"
-description = "Voice-locked approvals and private replies for a screenless AI wearable."
+name = "saysafe"
+dynamic = ["version"]  # from src/saysafe/__init__.py
+description = "Privacy and approval guardrails for voice agents: who's speaking, and who's listening."
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Ratnam Ojha" }]
+keywords = ["voice", "voice-agent", "privacy", "speaker-verification", "guardrails", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+# The core (privacy filter, approvals, tokens) has no models and no network.
 dependencies = [
-    "fastapi",
-    "uvicorn[standard]",
     "pydantic>=2",
     "pyyaml",
-    "python-dotenv",
+    "rapidfuzz",
+    "jellyfish",
+]
+
+[project.urls]
+Homepage = "https://github.com/RatnamOjha/saysafe"
+Documentation = "https://ratnamojha.github.io/saysafe/"
+Issues = "https://github.com/RatnamOjha/saysafe/issues"
+Changelog = "https://github.com/RatnamOjha/saysafe/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Voice ID: speaker embeddings, enrollment, verification, VAD.
+voice = [
     "numpy",
+    "scipy",
     "soundfile",
-    "sounddevice",
     "torch",
     "torchaudio",
     "speechbrain",
-    "faster-whisper",
     "silero-vad",
-    "piper-tts",
-    "openai",
-    "httpx",
     "cryptography",
     "keyring",
-    "num2words",
-    "rapidfuzz",
-    "jellyfish",
-    "librosa",
-    "scikit-learn",
-    "scipy",
-    "matplotlib",
-    "rich",
-    "typer",
 ]
-
-[project.scripts]
-earshot = "earshot.cli:app"
+# Pipecat pipeline step (saysafe.integrations.pipecat). Pipecat itself needs Python 3.11+.
+pipecat = ["pipecat-ai>=1.12; python_version >= '3.11'"]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "hypothesis"]
+lint = ["ruff", "mypy", "types-pyyaml"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material", "mkdocstrings[python]"]
+dev = [
+    { include-group = "lint" },
+    "pytest",
+    "pytest-asyncio",
+    "hypothesis",
+    "band-demo",
+    "matplotlib",
+    "pipecat-ai>=1.12; python_version >= '3.11'",
+]
+
+[tool.uv.workspace]
+members = ["examples/band_demo"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "src/saysafe/__init__.py"
+
 [tool.hatch.build.targets.wheel]
-packages = ["earshot"]
+packages = ["src/saysafe"]
 
 # CPU-only torch. macOS wheels on PyPI are already CPU builds; on Linux (CI)
 # pull from the PyTorch CPU index so we don't download CUDA.
 [tool.uv.sources]
+band-demo = { workspace = true }
+saysafe = { workspace = true }
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 torchaudio = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
@@ -59,12 +89,20 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "examples/band_demo/tests"]
+addopts = "--import-mode=importlib"
+pythonpath = ["."]
 markers = ["models: needs downloaded models (run with -m models)"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/saysafe"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
+extend-exclude = ["*.md"]  # README code blocks are laid out for reading
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -73,4 +111,6 @@ select = ["E", "F", "I", "UP", "B"]
 extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
 [tool.ruff.lint.per-file-ignores]
-"eval/*" = ["E501"]  # dense report/dict code; readability over wrapping
+"eval/*" = ["E501"]
+"bench/*" = ["E501"]
+"examples/band_demo/src/band_demo/cli.py" = ["E501"]  # dense report/dict code; readability over wrapping

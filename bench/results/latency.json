@@ -1,0 +1,19 @@
+{
+  "generated": "2026-10-03 18:15 UTC",
+  "machine": "Apple M3",
+  "python": "3.11.13",
+  "privacy_check": {
+    "p50_ms": 0.053,
+    "p95_ms": 0.208,
+    "p99_ms": 0.246,
+    "n": 2960,
+    "replies": 74,
+    "mean_words": 6.6
+  },
+  "approval_start_and_reply": {
+    "p50_ms": 0.024,
+    "p95_ms": 0.026,
+    "p99_ms": 0.032,
+    "n": 1000
+  }
+}

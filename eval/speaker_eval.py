@@ -28,17 +28,18 @@ import tempfile
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import yaml
 from _common import LATEST, LIBRISPEECH, NOISE, VOICES, read_manifest
+from band_demo.config import CONFIG_DIR
 
-from earshot.audio.io import SR, load_audio
-from earshot.config import CONFIG_DIR, load_yaml
-from earshot.identity.embed import TooShort, cosine, embed, normalize
-from earshot.identity.verify import Thresholds
+from saysafe.config import load_yaml
+from saysafe.voice.embed import TooShort, cosine, embed, normalize
+from saysafe.voice.io import SR, load_audio
+from saysafe.voice.verify import Thresholds
 
 SEED = 13
 MIN_SPEECH = None  # set from config (the reply minimum) in main
@@ -192,7 +193,7 @@ class _Scorer:
         self.mean = mean
 
     def score_audio(self, audio, min_speech_s=None):
-        from earshot.identity.verify import verify
+        from saysafe.voice.verify import verify
 
         profile = type("P", (), {"mean": self.mean})()
         from functools import partial
@@ -207,7 +208,7 @@ class _ForcedIssuer:
     """Issues a chosen word, so a recorded clip can be the 'right' or an 'old' word."""
 
     def __init__(self, clock):
-        from earshot.approvals.challenge import ChallengeIssuer
+        from saysafe.approvals.challenge import ChallengeIssuer
 
         self._inner = ChallengeIssuer(clock=clock)
         self.word = "zebra"
@@ -228,7 +229,7 @@ class _TextSTT:
         self.real, self.forced = real, forced
 
     def transcribe(self, audio):
-        from earshot.audio.stt import Transcript
+        from band_demo.audio.stt import Transcript
 
         return (
             Transcript(self.forced, [], 0.0, "forced")
@@ -241,25 +242,22 @@ def run_attempts(
     attempts: list[dict], profile_mean: np.ndarray, t: Thresholds
 ) -> tuple[list, list]:
     """Each attempt: {group, condition, tier, reply: Clip, command: Clip|None, word, forced_text}."""
-    from earshot.agent.channels import PhoneChannel
-    from earshot.agent.events import EventBus
-    from earshot.agent.mock_agent import MockAgent
-    from earshot.approvals.audit import AuditLog
-    from earshot.approvals.hook import Approver
-    from earshot.approvals.pending import PendingApprovals
-    from earshot.approvals.tokens import TokenService
-    from earshot.audio.stt import get_stt
-    from earshot.identity.embed import Embedding
-    from earshot.privacy.audience import FixedAudience
+    from band_demo.agent.channels import PhoneChannel
+    from band_demo.agent.events import EventBus
+    from band_demo.agent.mock_agent import MockAgent
+    from band_demo.approvals_hook import Approver
+    from band_demo.audio.stt import get_stt
+
+    from saysafe import ApprovalGuard, AuditLog
+    from saysafe.privacy.audience import FixedAudience
+    from saysafe.voice.embed import Embedding
 
     tmp = Path(tempfile.mkdtemp())
-    clock = time.time
-    tokens = TokenService(b"eval" * 8, tmp / "n.sqlite", clock=clock)
-    issuer = _ForcedIssuer(clock)
+    guard = ApprovalGuard(b"eval" * 8, nonces=tmp / "n.sqlite", thresholds=t,
+                          audit=AuditLog(tmp / "audit.jsonl"))  # fmt: skip
+    issuer = guard.issuer = _ForcedIssuer(time.time)
     stt = _TextSTT(get_stt("reply"), None)
-    approver = Approver(stt=stt, scorer=_Scorer(profile_mean), tokens=tokens,
-                        pending=PendingApprovals(tokens, clock=clock), issuer=issuer,
-                        audit=AuditLog(tmp / "audit.jsonl"), clock=clock, t=t)  # fmt: skip
+    approver = Approver(stt=stt, scorer=_Scorer(profile_mean), guard=guard)
     agent = MockAgent()
     events = EventBus()
     phone = PhoneChannel(events, console_only=True)
@@ -365,13 +363,14 @@ def main() -> int:
     target = CONFIG_DIR if "EARSHOT_EVAL_DATA" not in os.environ else LATEST
     LATEST.mkdir(parents=True, exist_ok=True)
     if not args.no_write_thresholds:
+        target.mkdir(parents=True, exist_ok=True)
         (target / "thresholds.calibrated.yaml").write_text(
             "# Written by eval/speaker_eval.py. Do not edit by hand; rerun make eval.\n"
             + yaml.safe_dump(
                 {
                     "t_accept": t.t_accept,
                     "t_reject": t.t_reject,
-                    "date": datetime.now(UTC).strftime("%Y-%m-%d"),
+                    "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     "n_dev_owner_clips": cal["n_dev_owner"],
                     "n_impostor_clips": cal["n_impostor"],
                     "n_librispeech_speakers": cal["n_librispeech_speakers"],
@@ -477,7 +476,7 @@ def main() -> int:
 
     # latency
     lat_embed, lat_stt = [], []
-    from earshot.audio.stt import get_stt
+    from band_demo.audio.stt import get_stt
 
     reply_stt = get_stt("reply")
     for c in [c for c in test if c.condition == "close"][:30]:
@@ -497,7 +496,7 @@ def main() -> int:
                 "p95": round(float(np.percentile(xs, 95)), 1), "n": len(xs)} if xs else None  # fmt: skip
 
     report = {
-        "generated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "people": {
             "owner": 1,
             "friends": len({c.pid for c in clips if c.group == "friend"}),

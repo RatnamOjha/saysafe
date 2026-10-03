@@ -17,7 +17,7 @@ import numpy as np
 import soundfile as sf
 from _common import DATA, LIBRISPEECH
 
-from earshot.audio.io import save_wav
+from saysafe.voice.io import save_wav
 
 URL = "https://www.openslr.org/resources/12/test-clean.tar.gz"
 SPEAKERS, PER_SPEAKER, MAX_S = 20, 5, 4.0

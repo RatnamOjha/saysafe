@@ -1,0 +1,21 @@
+saysafe
+Copyright 2026 Ratnam Ojha
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party models
+------------------
+saysafe bundles no model weights. With the optional voice extra
+(pip install "saysafe[voice]"), these are downloaded or loaded at runtime:
+
+- ECAPA-TDNN speaker embeddings, speechbrain/spkrec-ecapa-voxceleb
+  (https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb). Apache-2.0 per its
+  model card; trained on VoxCeleb. Downloaded from Hugging Face on first use to
+  ~/.cache/saysafe/ecapa.
+- Silero VAD (https://github.com/snakers4/silero-vad). MIT. Shipped inside the
+  silero-vad package.
+
+The band demo in examples/band_demo (not part of the saysafe package) also uses
+faster-whisper with OpenAI Whisper weights (MIT) for speech-to-text, and the Piper
+voice en_US-lessac-medium for text-to-speech. That voice is trained on the Blizzard
+2013 Lessac dataset, which has its own license: check it before any commercial use.

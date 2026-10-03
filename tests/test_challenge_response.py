@@ -4,8 +4,8 @@ import jellyfish
 import pytest
 from rapidfuzz.distance import Levenshtein
 
-from earshot.approvals.challenge import Challenge, ChallengeIssuer, words
-from earshot.approvals.response import match_response
+from saysafe.approvals.challenge import Challenge, ChallengeIssuer, words
+from saysafe.approvals.response import match_response
 
 NOW = 1000.0
 
@@ -45,7 +45,6 @@ def test_issue_binds_expires_and_avoids_repeats():
     issuer = ChallengeIssuer(clock=lambda: t["now"])
     c = issuer.issue("act-1")
     assert c.action_id == "act-1" and c.expires_at - c.issued_at == 30
-    assert issuer.by_action["act-1"] is c
     assert c.status(NOW + 29.9) == "valid" and c.status(NOW + 30) == "expired"
     issued = [issuer.issue(f"a{i}").word for i in range(50)]
     assert len(set(issued)) == 50  # no repeats within the recent window

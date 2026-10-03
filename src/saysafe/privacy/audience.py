@@ -18,6 +18,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
 from saysafe.config import load_yaml
@@ -29,6 +30,20 @@ SR = 16000  # audio is 16 kHz mono everywhere in saysafe
 
 Label = Literal["owner", "other", "unclear"]
 AudienceLevel = Literal["alone_likely", "unknown", "others_present"]
+
+
+class Room(str, Enum):
+    """Who may hear the speaker right now.
+
+    Most apps set it from device state: guest mode, passengers in the car, a meeting on
+    the calendar -> OTHERS_PRESENT; a private-mode switch -> ALONE; nothing known ->
+    UNKNOWN, which is cautious. With the voice extra, AudienceTracker.room() works it
+    out from the voices it hears.
+    """
+
+    ALONE = "alone_likely"
+    UNKNOWN = "unknown"
+    OTHERS_PRESENT = "others_present"
 
 
 @dataclass(frozen=True)
@@ -114,6 +129,9 @@ class AudienceTracker:
             self._obs.popleft()
 
     # state
+
+    def room(self) -> Room:
+        return Room(self.state().level)
 
     def state(self) -> AudienceState:
         now = self.clock()

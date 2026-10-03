@@ -40,9 +40,19 @@ voice = [
     "cryptography",
     "keyring",
 ]
+# Pipecat pipeline step (saysafe.integrations.pipecat). Pipecat itself needs Python 3.11+.
+pipecat = ["pipecat-ai>=1.12; python_version >= '3.11'"]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "hypothesis", "band-demo", "matplotlib"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "hypothesis",
+    "band-demo",
+    "matplotlib",
+    "pipecat-ai>=1.12; python_version >= '3.11'",
+]
 
 [tool.uv.workspace]
 members = ["examples/band_demo"]
@@ -76,6 +86,7 @@ markers = ["models: needs downloaded models (run with -m models)"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["*.md"]  # README code blocks are laid out for reading
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

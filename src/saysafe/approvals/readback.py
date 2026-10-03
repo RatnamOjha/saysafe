@@ -7,9 +7,8 @@ Who, how much, where, anything unusual, then what to say. The body is capped at
 from dataclasses import dataclass
 from decimal import Decimal
 
-from num2words import num2words
-
 from saysafe.approvals.actions import Action
+from saysafe.approvals.numwords import number_words
 from saysafe.approvals.policy import RiskAssessment
 
 MAX_BODY_WORDS = 14
@@ -40,7 +39,7 @@ class Readback:
 
 
 def _n(n: int) -> str:
-    return num2words(n).replace(",", "").replace(" and ", " ")
+    return number_words(n)
 
 
 def money_words(amount: Decimal) -> str:

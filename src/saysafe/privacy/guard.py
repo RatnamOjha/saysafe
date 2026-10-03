@@ -27,7 +27,7 @@ from saysafe.privacy.detect import (
     regex_spans,
 )
 from saysafe.privacy.rewrite import Smoother
-from saysafe.privacy.route import Channel, route, table_cell
+from saysafe.privacy.route import Channel, VoiceStyle, route, table_cell
 
 _ROOM_EVIDENCE = {
     Room.ALONE: "Only you can hear",
@@ -114,7 +114,7 @@ class PrivacyGuard:
             discreet_mode=discreet,
             evidence=evidence,
         )
-        style = "whisper" if whisper else "normal"
+        style: VoiceStyle = "whisper" if whisper else "normal"
         r = route(text, detection, state, style, self.smoother, self.screen)
         return PrivacyDecision(
             say=r.spoken_text or "",

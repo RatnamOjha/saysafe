@@ -8,7 +8,7 @@ Pipecat: saysafe.integrations.pipecat, with pip install "saysafe[pipecat]".
 
 from saysafe.approvals.actions import Action, action_hash
 from saysafe.approvals.audit import AuditLog
-from saysafe.approvals.fusion import Thresholds, load_thresholds
+from saysafe.approvals.fusion import Thresholds, calibrate, load_thresholds
 from saysafe.approvals.guard import ApprovalGuard, Step, StepClosed
 from saysafe.approvals.tokens import MemoryNonceStore, Refused, SQLiteNonceStore
 from saysafe.privacy.audience import Room
@@ -29,6 +29,7 @@ __all__ = [
     "Thresholds",
     "__version__",
     "action_hash",
+    "calibrate",
     "load_thresholds",
 ]
 

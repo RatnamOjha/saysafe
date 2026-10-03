@@ -74,3 +74,18 @@ def test_long_body_is_capped():
     action = dict(demo_actions())["set a reminder to call mom at six"]
     long = action.model_copy(update={"params": {"what": " ".join(["word"] * 30), "when": "six"}})
     assert readback(long, assess(long)).body_words <= MAX_BODY_WORDS
+
+
+@pytest.mark.parametrize(
+    "n, words",
+    [
+        (0, "zero"), (7, "seven"), (19, "nineteen"), (20, "twenty"), (43, "forty-three"),
+        (100, "one hundred"), (120, "one hundred twenty"), (1500, "one thousand five hundred"),
+        (2412, "two thousand four hundred twelve"), (1_000_000, "one million"),
+        (5_000_042, "five million forty-two"), (-3, "minus three"),
+    ],
+)  # fmt: skip
+def test_number_words(n, words):
+    from saysafe.approvals.numwords import number_words
+
+    assert number_words(n) == words

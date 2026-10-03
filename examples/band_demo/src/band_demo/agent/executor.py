@@ -6,11 +6,10 @@ Refused is re-exported here for callers that only know the executor.
 from collections.abc import Callable
 from decimal import Decimal
 
-from num2words import num2words
-
 from band_demo.agent.mock_agent import Reply
 from band_demo.config import verify_token
 from saysafe import Action, Refused
+from saysafe.approvals.numwords import number_words
 
 
 class MissingApproval(Exception):
@@ -40,7 +39,7 @@ def _money(amount: Decimal | None) -> str:
     if amount is None:
         return "it"
     dollars = int(amount)
-    words = num2words(dollars)
+    words = number_words(dollars)
     return f"{words} dollars" if amount == dollars else f"{words} {int(amount * 100) % 100:02d}"
 
 

@@ -17,15 +17,21 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
     "Topic :: Security",
+    "Typing :: Typed",
 ]
 # The core (privacy filter, approvals, tokens) has no models and no network.
 dependencies = [
     "pydantic>=2",
     "pyyaml",
-    "num2words",
     "rapidfuzz",
     "jellyfish",
 ]
+
+[project.urls]
+Homepage = "https://github.com/RatnamOjha/saysafe"
+Documentation = "https://ratnamojha.github.io/saysafe/"
+Issues = "https://github.com/RatnamOjha/saysafe/issues"
+Changelog = "https://github.com/RatnamOjha/saysafe/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # Voice ID: speaker embeddings, enrollment, verification, VAD.
@@ -44,10 +50,12 @@ voice = [
 pipecat = ["pipecat-ai>=1.12; python_version >= '3.11'"]
 
 [dependency-groups]
+lint = ["ruff", "mypy", "types-pyyaml"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material", "mkdocstrings[python]"]
 dev = [
+    { include-group = "lint" },
     "pytest",
     "pytest-asyncio",
-    "ruff",
     "hypothesis",
     "band-demo",
     "matplotlib",
@@ -82,6 +90,11 @@ testpaths = ["tests", "examples/band_demo/tests"]
 addopts = "--import-mode=importlib"
 pythonpath = ["."]
 markers = ["models: needs downloaded models (run with -m models)"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/saysafe"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100

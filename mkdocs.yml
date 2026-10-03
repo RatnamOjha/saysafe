@@ -28,6 +28,7 @@ nav:
       - Voice ID: voice.md
       - Pipecat: pipecat.md
   - Threat model: threat-model.md
+  - Benchmarks: benchmarks.md
   - API reference: reference.md
   - Changelog: changelog.md
 

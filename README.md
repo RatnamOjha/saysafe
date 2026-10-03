@@ -178,12 +178,22 @@ The full list, with what each defense leaves to you, is in [THREAT_MODEL.md](THR
 
 ## Status
 
-Alpha (0.1, not yet released). The APIs above are what 0.1 will ship. Benchmarks on public data are in progress.
+Alpha (0.1, not yet released). The APIs above are what 0.1 will ship. The private-reply benchmark is waiting on reviewed labels; the rest are below.
 
 ## Results
 
 <!-- results:start -->
-Not measured yet. Run `make eval`.
+
+| Result | Value |
+|---|---|
+| Privacy check, per reply (p50 / p95) | 0.053 / 0.206 ms on Apple M3 |
+| Voice ID equal error rate, 3 s / 0.5 s of speech | 0.4% / 5.9% |
+| Strangers approved by voice, end to end (packaged thresholds, 1 s reply) | 0 of 760 (0%) |
+| Owner approved without a phone tap (same) | 151 of 160 (94.4%) |
+| Private-reply accuracy | not measured yet (0 of 140 labels reviewed) |
+
+Voice numbers are on LibriSpeech (clean read speech), close to the best case. Details and caveats: [bench/results/BENCHMARKS.md](bench/results/BENCHMARKS.md). Rerun with `make bench`.
+
 <!-- results:end -->
 
 ## Development

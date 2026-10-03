@@ -1,0 +1,1 @@
+--8<-- "bench/results/BENCHMARKS.md"

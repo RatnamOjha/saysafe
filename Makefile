@@ -37,7 +37,10 @@ demo:
 preflight:
 	uv run band-demo preflight
 
+# Public benchmarks (LibriSpeech, reviewed replies, latency) -> bench/results + README.
+bench:
+	uv run python bench/run.py
+
 # The band demo's own evaluation (needs your recordings in eval/data).
 eval:
 	uv run python eval/run_all.py
-	uv run python scripts/update_readme_numbers.py

@@ -13,3 +13,4 @@ All notable changes to saysafe. The format follows [Keep a Changelog](https://ke
 - `calibrate(owner_scores, other_scores)`: voice thresholds from your own data.
 - `saysafe.integrations.pipecat.PrivacyFilter` (the `pipecat` extra): a pipeline step between the LLM and TTS.
 - `screen=`: what spoken lines call the private device ("phone", "watch", "app").
+- `make bench`: latency, voice ID on LibriSpeech test-clean (per speech length, and end to end through `ApprovalGuard`), and private replies on reviewed labels.

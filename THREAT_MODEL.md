@@ -2,6 +2,8 @@
 
 What saysafe defends against, how, and what it leaves to you. Read this before you put it in front of anything that moves money or opens doors.
 
+Voice matching is only supporting evidence. The primary safeguards are keeping sensitive replies private and verifying explicit approval against the exact action. Use authenticated phone approval for actions with serious consequences.
+
 ## What it protects
 
 1. **Private replies.** Login codes, balances, health, addresses, legal matters and the like shouldn't be read out loud when someone else may hear.

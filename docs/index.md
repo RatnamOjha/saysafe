@@ -1,11 +1,13 @@
 # saysafe
 
-Privacy and approval guardrails for voice agents. Rules only: no models, no network.
+A Python safety layer for ambient voice agents: route sensitive replies privately and require explicit, action-bound approval before consequential tool calls.
+
+Rules only in the core: no models, no network.
 
 Voice agents speak out loud and act on what they hear. A screen used to do two quiet jobs for them: keep what's shown private, and show who approved something. saysafe does both for voice:
 
 - **Who's listening.** A reply with a login code, a balance, a diagnosis or an address isn't read out when other people may hear. It's redacted or sent to the phone, and the rest is still said. [Private replies →](privacy.md)
-- **Who's speaking.** Risky actions need proof scaled to the risk (the owner's voice, a one-time word, or a phone tap), and the approval is bound to the exact action. [Approvals →](approvals.md)
+- **Approval before actions.** Proof scales with the risk. Voice matching can be one clue; a one-time word or phone tap adds stronger confirmation. The approval is bound to the exact action. [Approvals →](approvals.md)
 
 saysafe never touches the mic or the speaker. Your app passes text (and, optionally, voice scores) in and gets back what to say.
 
@@ -40,10 +42,10 @@ step.say  # "Someone else might be listening. Check your phone to approve."
 
 ## Who it's for
 
-- **Devices that talk to one owner out loud:** wearables, home assistants, car assistants, robots. Both halves fit, voice ID included.
+- **Devices that talk to one owner out loud:** wearables, home assistants, car assistants, robots.
 - **Agents that take actions by voice,** including phone agents: read-backs, one-time words, phone taps and approvals bound to the action.
 - **Anything that sends LLM text to text-to-speech:** the privacy check as an output filter.
 
 ## What it isn't
 
-Voice ID is a convenience, not security: recordings and live voice clones can fool it. Rules catch the patterns they know, in English. Read the [threat model](threat-model.md) before relying on it.
+Voice matching is optional evidence, not identity proof. Recordings and live voice clones can fool it; use a phone tap for actions with serious consequences. The core job is private replies and action-bound approval. Rules catch the patterns they know, in English. Read the [threat model](threat-model.md) before relying on it.

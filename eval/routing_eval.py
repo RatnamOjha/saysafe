@@ -20,7 +20,6 @@ from pathlib import Path
 import numpy as np
 import yaml
 from _common import DATA, REPORTS
-from band_demo import privacy_llm
 
 from saysafe.privacy.audience import AudienceState
 from saysafe.privacy.detect import detect, rank
@@ -44,7 +43,13 @@ def rate(k: int, n: int) -> dict:
 
 
 def evaluate(items: list[dict], use_llm: bool, pace_s: float) -> dict:
-    classifier = privacy_llm.classify if use_llm else None
+    if use_llm:
+        # The demo classifier is optional and may be configured locally only.
+        from band_demo import privacy_llm
+
+        classifier = privacy_llm.classify
+    else:
+        classifier = None
 
     plain = [i for i in items if not i.get("injection")]
     inj = [i for i in items if i.get("injection")]

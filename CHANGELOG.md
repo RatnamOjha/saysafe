@@ -4,6 +4,9 @@ All notable changes to saysafe. The format follows [Keep a Changelog](https://ke
 
 ## Unreleased
 
+### Docs
+- Added a deployment guide explaining in-memory defaults, shared storage needs, and responsibilities the host app must handle.
+
 ### Added
 - An offline end-to-end example showing action-bound approval followed by private routing of the tool result.
 

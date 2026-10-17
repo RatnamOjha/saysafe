@@ -102,3 +102,5 @@ If your app knows who's speaking another way (a signed-in phone line, a paired d
 ## The phone channel
 
 saysafe can't tell who pressed Approve. Authenticate your phone channel: a signed-in app session or a device key. An unauthenticated approve URL lets anyone who sees it approve.
+
+For production storage choices and the host app's other responsibilities, see [Before you deploy](deployment.md).

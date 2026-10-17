@@ -97,6 +97,8 @@ approvals = ApprovalGuard(secret, policy={"rules": [
 
 A "no" rejects. A voice that doesn't match, an unclear reply, or a wrong word steps up to the phone. Actions that came from an email or web page (`source="from_content"`) need one tier more. A money read-back isn't said out loud when others may hear; it goes to the phone. If your app knows who's speaking another way (a signed-in phone line), pass `require_voice_score=False`.
 
+Before using this in a service, see [Before you deploy](docs/deployment.md) for storage, phone authentication, and executor requirements.
+
 ## 3. Voice ID (optional)
 
 ```python

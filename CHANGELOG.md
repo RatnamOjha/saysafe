@@ -4,6 +4,10 @@ All notable changes to saysafe. The format follows [Keep a Changelog](https://ke
 
 ## Unreleased
 
+### Fixed
+- Approval read-backs now include key destinations and amounts, and incomplete or overly long summaries step up to a full phone review. Phone requests include the complete action fields.
+- `Action.params` is deeply immutable after creation, including after `model_copy(update=...)`.
+
 ## [0.1.0] - 2026-10-03
 
 First release.

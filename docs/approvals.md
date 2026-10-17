@@ -18,7 +18,7 @@ if step.status == "awaiting_reply":
     speak(step.say)                          # "" when approved, "Okay, I won't." on a no
 
 if step.status == "awaiting_phone":
-    push_to_phone(step.id, step.phone_request)
+    push_to_phone(step.id, step.phone_request, step.phone_details)
     # later, from your phone webhook:
     step = approvals.phone_approve(step.id)  # or phone_deny(step.id)
 
@@ -41,7 +41,8 @@ Every call returns the latest `Step`, a frozen snapshot:
 | `status` | `approved`, `rejected`, `awaiting_reply`, `awaiting_phone`, `expired` |
 | `say` | what to say now (`""` for nothing) |
 | `token` | set when approved: pass it to the executor |
-| `phone_request` | set on entering `awaiting_phone`: show it with Approve / Deny |
+| `phone_request` | short summary for notifications |
+| `phone_details` | complete action fields, as JSON; display these before offering Approve / Deny |
 | `tier`, `reasons`, `rule_id`, `method` | why, and how it was decided |
 
 A call that doesn't fit the step's status (a second phone tap, a reply after a decision, an unknown id) raises `StepClosed`, which carries `.status`. Map it to HTTP 409 (or 404 when `.status` is `None`).
@@ -56,6 +57,8 @@ A call that doesn't fit the step's status (a second phone tap, a reply after a d
 | `phone_tap` | taps Approve on the phone |
 
 A voice step approves only when the reply matches **and** the voice score is in the accept band. A "no" anywhere in the reply rejects ("yes, no wait" is a no). Anything else steps up to the phone: a voice that doesn't match, no voice score, an unclear reply, a wrong or expired word.
+
+If the spoken read-back would omit fields or run longer than the short voice limit, Saysafe sends the request to the phone instead. The phone app must render `phone_details` in full; `phone_request` is only a compact notification summary.
 
 The policy maps actions to tiers. Rules are checked in order and the first match wins:
 

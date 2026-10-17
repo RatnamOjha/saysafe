@@ -26,6 +26,23 @@ KNOWN_TYPES = (
 Source = Literal["user_voice", "agent_initiated", "from_content"]
 
 
+class _FrozenDict(dict):
+    """A JSON-serializable dict that refuses mutation after an Action is created."""
+
+    def _immutable(self, *args, **kwargs):
+        raise TypeError("Action.params is immutable; create a new Action to change it")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _FrozenDict({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 class Action(BaseModel):
     """Something the agent wants to do. source: user_voice (the owner asked for it),
     agent_initiated (the assistant suggested it) or from_content (an email, a web page
@@ -49,6 +66,21 @@ class Action(BaseModel):
     def _cents(cls, v: Decimal | None) -> Decimal | None:
         # 43.2 and 43.20 must hash the same.
         return None if v is None else Decimal(v).quantize(Decimal("0.01"))
+
+    @field_validator("params", mode="after")
+    @classmethod
+    def _freeze_params(cls, value: dict[str, Any]) -> dict[str, Any]:
+        # Pydantic's frozen model setting blocks `action.amount = ...`, but a nested dict
+        # would otherwise still allow `action.params["x"] = ...` after approval.
+        return _freeze(value)
+
+    def model_copy(self, *, update=None, deep: bool = False):
+        # BaseModel.model_copy intentionally skips validation. Re-freeze params changed
+        # through that convenience method too, so a copied action stays immutable.
+        copied = super().model_copy(update=update, deep=deep)
+        if update and "params" in update:
+            object.__setattr__(copied, "params", _freeze(copied.params))
+        return copied
 
 
 def canonical_json(action: Action) -> str:

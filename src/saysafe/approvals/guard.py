@@ -9,7 +9,9 @@
         step = approvals.reply(step, transcript, voice_score=0.71)
         speak(step.say)
     if step.status == "awaiting_phone":
-        ask_phone(step.id, step.phone_request)  # then approvals.phone_approve(step.id)
+        ask_phone(
+            step.id, step.phone_request, step.phone_details
+        )  # render all details before approval
     if step.status == "approved":
         run(action, step.token)  # the executor calls approvals.verify(token, action)
 
@@ -41,7 +43,7 @@ from saysafe.approvals.audit import AuditLog
 from saysafe.approvals.challenge import Challenge, ChallengeIssuer
 from saysafe.approvals.fusion import Thresholds, fuse, load_thresholds
 from saysafe.approvals.policy import _KNOWN, TIERS, RiskAssessment, Tier, assess
-from saysafe.approvals.readback import readback, summary
+from saysafe.approvals.readback import needs_phone_review, phone_details, readback, summary
 from saysafe.approvals.response import Match, match_response
 from saysafe.approvals.tokens import NonceStore, TokenService
 from saysafe.config import default_config
@@ -52,6 +54,7 @@ Status = Literal["approved", "rejected", "awaiting_reply", "awaiting_phone", "ex
 Outcome = Literal["approve", "step_up", "reject"]
 
 REJECT_LINE = "Okay, I won't."
+PHONE_REVIEW_LINE = "Please review all the details on your phone before approving."
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,7 @@ class Step:
     say: str = ""  # what to say now; "" for nothing
     token: str | None = None  # set when approved: pass it to the executor
     phone_request: str | None = None  # set on entering awaiting_phone: show it with Approve/Deny
+    phone_details: str | None = None  # complete action data; render this before phone approval
     reasons: tuple[str, ...] = ()
     rule_id: str = ""
     method: str = ""  # how it was decided: none | voice | phone_tap
@@ -214,16 +218,34 @@ class ApprovalGuard:
             return self._decided(step, "approve")
 
         private = self._private_reason(action, Room(room), headphones)
+        phone_review = needs_phone_review(action, risk, self.screen)
         if risk.tier == "phone_tap" or private:
-            say = (
-                self._private_line() if private else readback(action, risk, None, self.screen).text
-            )
-            reasons = (*base.reasons, private) if private else base.reasons
+            if private:
+                say = self._private_line()
+            elif phone_review:
+                say = PHONE_REVIEW_LINE
+            else:
+                say = readback(action, risk, None, self.screen).text
+            extra_reason = private or ("Read-back omits action details" if phone_review else None)
+            reasons = (*base.reasons, extra_reason) if extra_reason else base.reasons
             step = self._to_phone(replace(base, reasons=reasons), say, now)
             self.steps.put(step)
             self._emit("readback", action_id=action.id, text=say, tier=risk.tier,
-                       private=bool(private), challenge_word=None)  # fmt: skip
+                       private=bool(private), challenge_word=None,
+                       phone_review=phone_review)  # fmt: skip
             return self._decided(step, "step_up", match="private_readback" if private else None)
+
+        if phone_review:
+            step = self._to_phone(
+                replace(base, reasons=(*base.reasons, "Read-back omits action details")),
+                PHONE_REVIEW_LINE,
+                now,
+            )
+            self.steps.put(step)
+            self._emit("readback", action_id=action.id, text=PHONE_REVIEW_LINE,
+                       tier=risk.tier, private=False, challenge_word=None,
+                       phone_review=True)  # fmt: skip
+            return self._decided(step, "step_up")
 
         word = self.issuer.issue(action.id).word if risk.tier == "voice_challenge" else None
         rb = readback(action, risk, word, self.screen)
@@ -344,6 +366,7 @@ class ApprovalGuard:
 
     def _to_phone(self, step: Step, say: str, now: float) -> Step:
         return replace(step, status="awaiting_phone", say=say, phone_request=summary(step.action),
+                       phone_details=phone_details(step.action),
                        method="phone_tap", expires_at=now + self.policy["phone"]["pending_ttl_s"],
                        challenge_word=None)  # fmt: skip
 

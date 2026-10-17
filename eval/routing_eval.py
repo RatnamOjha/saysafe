@@ -2,7 +2,7 @@
 
     uv run python eval/routing_eval.py                 # rules only, reviewed items
     uv run python eval/routing_eval.py --llm           # also rules + LLM (paced for rate limits)
-    uv run python eval/routing_eval.py --unreviewed    # dry run on unreviewed labels
+    uv run python eval/routing_eval.py --unreviewed    # explicitly marked dry run
 
 Writes eval/reports/routing.json and routing.md. Every number comes with its sample size.
 Replies are judged on their text alone (no source tags), which is stricter than the app,
@@ -20,7 +20,6 @@ from pathlib import Path
 import numpy as np
 import yaml
 from _common import DATA, REPORTS
-from band_demo import privacy_llm
 
 from saysafe.privacy.audience import AudienceState
 from saysafe.privacy.detect import detect, rank
@@ -44,7 +43,13 @@ def rate(k: int, n: int) -> dict:
 
 
 def evaluate(items: list[dict], use_llm: bool, pace_s: float) -> dict:
-    classifier = privacy_llm.classify if use_llm else None
+    if use_llm:
+        # The demo classifier is optional and may be configured locally only.
+        from band_demo import privacy_llm
+
+        classifier = privacy_llm.classify
+    else:
+        classifier = None
 
     plain = [i for i in items if not i.get("injection")]
     inj = [i for i in items if i.get("injection")]
@@ -146,14 +151,21 @@ def pct(r: dict) -> str:
     return "n/a" if r["rate"] is None else f"{r['count']} of {r['n']} ({100 * r['rate']:.1f}%)"
 
 
-DRY_RUN = "  \n**DRY RUN on unreviewed labels. Not for publishing.**"
-
-
 def markdown(report: dict) -> str:
+    if report["dry_run"]:
+        dataset_status = (
+            f"DRY RUN on {report['n_evaluated']} items; "
+            f"{report['n_reviewed']} of {report['n_total']} labels reviewed. Not for publishing."
+        )
+    else:
+        dataset_status = (
+            f"Generated from {report['n_reviewed']} fully reviewed replies "
+            f"({report['n_total']} total)."
+        )
     lines = [
         "# Private-reply routing eval", "",
-        f"Generated {report['generated']} from {report['n_reviewed']} reviewed replies "
-        f"({report['n_injection']} injection cases)." + DRY_RUN * report["dry_run"],
+        f"Generated {report['generated']}. {dataset_status} "
+        f"({report['n_injection']} injection cases).",
         "", "Replies are judged on their text alone, with another voice in the room.", "",
         "| Metric | " + " | ".join(m["mode"] for m in report["modes"]) + " |",
         "|---|" + "---|" * len(report["modes"]),
@@ -207,8 +219,17 @@ def main() -> int:
     path = Path(args.data)
     if not path.exists():
         raise SystemExit("No dataset: uv run python eval/gen_replies.py")
-    items = yaml.safe_load(path.read_text())
-    use = items if args.unreviewed else [i for i in items if i.get("reviewed")]
+    items = yaml.safe_load(path.read_text()) or []
+    reviewed = [i for i in items if i.get("reviewed")]
+    if args.unreviewed:
+        use = items
+    elif len(reviewed) != len(items):
+        raise SystemExit(
+            f"Review incomplete: {len(reviewed)} of {len(items)} labels reviewed. "
+            "Finish `uv run python eval/review.py`; use --unreviewed only for a dry run."
+        )
+    else:
+        use = items
     if not use:
         raise SystemExit("No reviewed items yet: uv run python eval/review.py")
 
@@ -219,7 +240,9 @@ def main() -> int:
     report = {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "dry_run": args.unreviewed,
-        "n_reviewed": len(use),
+        "n_reviewed": len(reviewed),
+        "n_total": len(items),
+        "n_evaluated": len(use),
         "n_injection": sum(bool(i.get("injection")) for i in use),
         "modes": modes,
     }

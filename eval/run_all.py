@@ -188,8 +188,9 @@ def main() -> int:
     replies = DATA / "replies.yaml"
     routing = None
     if replies.exists():
-        reviewed = sum(i.get("reviewed", False) for i in yaml.safe_load(replies.read_text()))
-        flags = [] if reviewed else ["--unreviewed"]
+        items = yaml.safe_load(replies.read_text()) or []
+        reviewed = sum(bool(i.get("reviewed")) for i in items)
+        flags = [] if items and reviewed == len(items) else ["--unreviewed"]
         if env("LLM_API_KEY") and not args.no_llm:
             flags.append("--llm")
         run("routing_eval.py", *flags)

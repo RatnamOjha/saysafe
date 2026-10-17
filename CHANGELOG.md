@@ -6,6 +6,7 @@ All notable changes to saysafe. The format follows [Keep a Changelog](https://ke
 
 ### Docs
 - Added a deployment guide explaining in-memory defaults, shared storage needs, and responsibilities the host app must handle.
+- Clarified that voice matching is optional supporting evidence, while private replies and action-bound approvals are the core safeguards.
 
 ### Added
 - An offline end-to-end example showing action-bound approval followed by private routing of the tool result.

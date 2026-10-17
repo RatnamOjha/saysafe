@@ -151,6 +151,19 @@ Room: OTHERS_PRESENT
   speaker: The Moon is about 384,400 kilometers (≈238,900 miles) from Earth on average.
 ```
 
+## The full safety flow
+
+To see approval and private reply routing together, run this offline example:
+
+```bash
+uv run python examples/safety_layer.py
+```
+
+It simulates a $25 transfer: Saysafe reads back the recipient and amount, checks the
+one-time voice challenge, verifies the token against the exact action before execution,
+then keeps the result private because other people are in the room. It uses fictional data;
+there is no microphone, phone service, LLM, or real transfer.
+
 ## Optional LLM layers
 
 Rules catch the patterns they know ([sensitivity.yaml](https://github.com/RatnamOjha/saysafe/blob/main/src/saysafe/data/sensitivity.yaml)). Plug in any LLM for more:

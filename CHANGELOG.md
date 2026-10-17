@@ -4,6 +4,9 @@ All notable changes to saysafe. The format follows [Keep a Changelog](https://ke
 
 ## Unreleased
 
+### Added
+- An offline end-to-end example showing action-bound approval followed by private routing of the tool result.
+
 ### Fixed
 - Approval read-backs now include key destinations and amounts, and incomplete or overly long summaries step up to a full phone review. Phone requests include the complete action fields.
 - `Action.params` is deeply immutable after creation, including after `model_copy(update=...)`.

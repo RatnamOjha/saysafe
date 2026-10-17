@@ -70,7 +70,9 @@ step = approvals.reply(step, transcript="copper", voice_score=0.71)
 step.status   # "approved", "rejected", or "awaiting_phone"
 
 if step.status == "awaiting_phone":
-    push_to_phone(step.id, step.phone_request)    # Approve / Deny -> approvals.phone_approve(step.id)
+    push_to_phone(step.id, step.phone_request, step.phone_details)
+    # Show the full details before offering Approve / Deny.
+    # Later: approvals.phone_approve(step.id) or phone_deny(step.id)
 
 # in the executor, right before running it (single use; fails if any field changed):
 approvals.verify(step.token, action)

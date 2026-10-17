@@ -4,7 +4,7 @@ import pytest
 
 from saysafe.approvals.actions import Action
 from saysafe.approvals.policy import assess
-from saysafe.approvals.readback import MAX_BODY_WORDS, money_words, readback
+from saysafe.approvals.readback import MAX_BODY_WORDS, money_words, needs_phone_review, readback
 
 
 def demo_actions():
@@ -43,6 +43,8 @@ def test_money_words(amount, words):
 @pytest.mark.parametrize("said, action", demo_actions(), ids=[s for s, _ in demo_actions()])
 def test_every_demo_readback_is_short(said, action):
     risk = assess(action)
+    if needs_phone_review(action, risk):
+        return  # long or unspoken action details must be reviewed on the phone
     rb = readback(action, risk, "maple" if risk.tier == "voice_challenge" else None)
     assert rb.body_words <= MAX_BODY_WORDS
     assert rb.body_words / 2.6 < 4.0, rb.body  # the body alone is under 4 s
@@ -55,11 +57,11 @@ def test_target_styles():
     assert rb("order my usual") == "DoorDash, forty-three twenty, to home. Say yes."
     assert (
         rb("send fifty dollars to Jake", "copper")
-        == "Jake, fifty dollars. Say 'copper' to confirm."
+        == "Jake, fifty dollars, to @jake-morales. Say 'copper' to confirm."
     )
     assert (
         rb("email says: cancel Netflix", "maple")
-        == "This came from an email. Cancel Netflix? Say 'maple' to confirm."
+        == "This came from an email. Cancel Netflix, fifteen forty-nine? Say 'maple' to confirm."
     )
     assert rb("send twenty dollars to Priya").startswith("New payee. Priya, twenty dollars.")
 

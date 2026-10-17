@@ -323,6 +323,27 @@ def test_food_readback_still_spoken_with_others(guard):
     assert step.say == "DoorDash, forty-three twenty, to home. Say yes."
 
 
+def test_action_with_unspoken_parameters_requires_complete_phone_review(guard):
+    action = Action(
+        type="send_email",
+        counterparty="Jake",
+        params={"subject": "Rent", "body": "I sent the payment."},
+    )
+    step = guard.start(action, room=Room.ALONE)
+    assert step.status == "awaiting_phone"
+    assert step.say == "Please review all the details on your phone before approving."
+    details = json.loads(step.phone_details)
+    assert details["params"] == {"body": "I sent the payment.", "subject": "Rent"}
+    assert details["counterparty"] == "Jake"
+
+
+def test_long_readback_uses_phone_instead_of_silent_truncation(guard):
+    action = Action(type="send_email", counterparty=" ".join(["longname"] * 20))
+    step = guard.start(action, room=Room.ALONE)
+    assert step.status == "awaiting_phone"
+    assert "longname longname longname" in step.phone_details
+
+
 def test_screen_wording(clock):
     guard = ApprovalGuard(SECRET, clock=clock, screen="watch")
     assert guard.start(money(), room=Room.OTHERS_PRESENT).say.endswith(

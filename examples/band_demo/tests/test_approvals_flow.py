@@ -15,7 +15,7 @@ from band_demo.audio.tts import NullTTS
 from band_demo.server.app import create_app
 from fastapi.testclient import TestClient
 
-from saysafe import ApprovalGuard, AuditLog, StepClosed, Thresholds
+from saysafe import Action, ApprovalGuard, AuditLog, StepClosed, Thresholds
 from saysafe.approvals.fusion import band
 from saysafe.privacy.audience import FixedAudience
 from saysafe.voice.embed import Embedding
@@ -124,6 +124,21 @@ def run(w, command, command_voice=0.8):
         w.pipeline._context = orig
 
 
+def run_short_order(w, reply=None, command_voice=0.8):
+    """Use a fully spoken order to test the voice approval path."""
+    original = w.pipeline.agent.handle
+    w.pipeline.agent.handle = lambda _: Action(
+        type="order_food",
+        counterparty="DoorDash",
+        amount=Decimal("43.20"),
+        destination="home",
+    )
+    try:
+        return run(reply or w, "order my usual", command_voice)
+    finally:
+        w.pipeline.agent.handle = original
+
+
 def challenge_word(w):
     return next(e.data["challenge_word"] for e in w.events.log if e.type == "readback_spoken")
 
@@ -136,16 +151,16 @@ def audit_lines(w):
 
 
 def test_owner_yes_approves_and_runs(world):
-    r = run(say(world, "yeah, do it"), "order my usual")
+    r = run_short_order(world, say(world, "yeah, do it"))
     assert r.decision.outcome == "approve"
     assert world.pipeline.tts.spoken == [
-        "DoorDash, forty-three twenty, to home. Say yes.", "Order placed. Arrives at 7:40.",
+        "DoorDash, forty-three twenty, to home. Say yes.", "Order placed. Arrives at soon.",
     ]  # fmt: skip
     assert r.action in world.pipeline.executor.executed
 
 
 def test_friend_yes_steps_up_then_phone_approve_completes(world):
-    r = run(say(world, "yes", reply_voice=0.12), "order my usual", command_voice=0.1)
+    r = run_short_order(world, say(world, "yes", reply_voice=0.12), command_voice=0.1)
     assert r.decision.outcome == "step_up"
     assert world.pipeline.executor.executed == []
     assert "Check your phone" in world.pipeline.tts.spoken[-1]
@@ -154,14 +169,14 @@ def test_friend_yes_steps_up_then_phone_approve_completes(world):
 
     assert world.approver.resolve(r.action.id, approve=True).status == "approved"
     assert r.action in world.pipeline.executor.executed
-    assert world.pipeline.tts.spoken[-1] == "Order placed. Arrives at 7:40."
+    assert world.pipeline.tts.spoken[-1] == "Order placed. Arrives at soon."
     with pytest.raises(StepClosed):  # already resolved, no rerun
         world.approver.resolve(r.action.id, approve=True)
     assert world.pipeline.executor.executed.count(r.action) == 1
 
 
 def test_phone_deny_stops(world):
-    r = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
+    r = run_short_order(world, say(world, "yes", reply_voice=0.1), command_voice=0.1)
     assert world.approver.resolve(r.action.id, approve=False).status == "rejected"
     with pytest.raises(StepClosed, match="rejected"):
         world.approver.resolve(r.action.id, approve=True)
@@ -170,7 +185,7 @@ def test_phone_deny_stops(world):
 
 
 def test_phone_request_expires(world):
-    r = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
+    r = run_short_order(world, say(world, "yes", reply_voice=0.1), command_voice=0.1)
     world.clock.now += 121
     with pytest.raises(StepClosed, match="expired"):
         world.approver.resolve(r.action.id, approve=True)
@@ -178,29 +193,29 @@ def test_phone_request_expires(world):
 
 
 def test_negation_rejects(world):
-    r = run(say(world, "yes, no wait"), "order my usual")
+    r = run_short_order(world, say(world, "yes, no wait"))
     assert r.decision.outcome == "reject" and world.pipeline.executor.executed == []
     assert world.pipeline.tts.spoken[-1] == "Okay, I won't."
 
 
 def test_timeout_rejects(world):
-    r = run(world, "order my usual")  # nothing queued -> listen returns None
+    r = run_short_order(world)  # nothing queued -> listen returns None
     assert r.decision.outcome == "reject"
 
 
 def test_low_score_steps_up(world):
-    r = run(say(world, "yes", reply_voice=0.35), "order my usual", command_voice=0.35)
+    r = run_short_order(world, say(world, "yes", reply_voice=0.35), command_voice=0.35)
     assert r.decision.outcome == "step_up"
     assert "didn't match" in r.decision.reasons[0]
 
 
 def test_too_short_reply_steps_up(world):
-    r = run(say(world, "yes", reply_voice=None), "order my usual")
+    r = run_short_order(world, say(world, "yes", reply_voice=None))
     assert r.decision.outcome == "step_up" and "Too little speech" in r.decision.reasons[0]
 
 
 def test_typed_reply_never_approves(world):
-    r = run(say(world, "yes", reply_audio=False), "order my usual")
+    r = run_short_order(world, say(world, "yes", reply_audio=False))
     assert r.decision.outcome == "step_up"
 
 
@@ -245,7 +260,7 @@ def test_new_payee_goes_straight_to_phone(world):
     r = run(world, "send twenty dollars to Priya")
     assert r.decision.outcome == "step_up"
     assert world.pipeline.tts.spoken == [
-        "New payee. Priya, twenty dollars. Check your phone to approve."
+        "Please review all the details on your phone before approving."
     ]
     world.approver.resolve(r.action.id, approve=True)
     assert world.pipeline.tts.spoken[-1] == "Sent twenty dollars to Priya."
@@ -258,7 +273,8 @@ def test_from_content_bumps_a_tier(world):
     world.pipeline.agent.handle = lambda text: action
     r = run(say(world, "yes"), "cancel my Netflix")
     assert r.decision.outcome == "step_up"  # a yes isn't enough once bumped to a challenge
-    assert "email" in world.pipeline.tts.spoken[0]
+    assert r.action.source == "from_content"
+    assert "full action details" in world.pipeline.phone.sent[-1].text.lower()
 
 
 def test_reminder_needs_no_approval(world):
@@ -270,13 +286,13 @@ def test_reminder_needs_no_approval(world):
 
 def test_missing_profile_steps_up(world):
     world.approver._scorer = None
-    r = run(say(world, "yes"), "order my usual")
+    r = run_short_order(world, say(world, "yes"))
     assert r.decision.outcome == "step_up"
     assert r.decision.reasons[0] == "No owner voice enrolled"
 
 
 def test_audit_has_no_audio_embeddings_or_transcripts(world):
-    run(say(world, "yeah, do it, my code is 482913"), "order my usual")
+    run_short_order(world, say(world, "yeah, do it, my code is 482913"))
     lines = audit_lines(world)
     assert lines and lines[-1]["outcome"] == "approve"
     assert lines[-1]["scores"]["fused"] == pytest.approx(0.8, abs=1e-3)
@@ -290,7 +306,7 @@ def test_audit_rejects_unknown_fields(tmp_path):
 
 
 def test_trace_events_in_order(world):
-    run(say(world, "yes"), "order my usual")
+    run_short_order(world, say(world, "yes"))
     types = [e.type for e in world.events.log]
     order = ["risk_assessed", "readback_spoken", "reply_captured", "speaker_scored",
              "reply_matched", "decision", "executed"]  # fmt: skip
@@ -298,7 +314,7 @@ def test_trace_events_in_order(world):
 
 
 def test_executor_refuses_a_changed_action(world):
-    r = run(say(world, "yes"), "order my usual")
+    r = run_short_order(world, say(world, "yes"))
     tampered = r.action.model_copy(update={"amount": Decimal("430.20")})
     token = world.guard.tokens.issue(r.action, "voice", "voice", 0.8)
     with pytest.raises(Refused, match="action_changed"):
@@ -310,13 +326,13 @@ def test_executor_refuses_a_changed_action(world):
 
 def test_routes_approve_deny_404_409(world):
     client = TestClient(create_app(world.approver))
-    r = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
+    r = run_short_order(world, say(world, "yes", reply_voice=0.1), command_voice=0.1)
     assert client.post("/approvals/nope/approve").status_code == 404
     assert client.post(f"/approvals/{r.action.id}/approve").json()["status"] == "approved"
     assert client.post(f"/approvals/{r.action.id}/approve").status_code == 409
     assert r.action in world.pipeline.executor.executed
 
-    r2 = run(say(world, "yes", reply_voice=0.1), "order my usual", command_voice=0.1)
+    r2 = run_short_order(world, say(world, "yes", reply_voice=0.1), command_voice=0.1)
     assert client.post(f"/approvals/{r2.action.id}/deny").json()["status"] == "denied"
     assert r2.action not in world.pipeline.executor.executed
 
@@ -331,7 +347,7 @@ def test_money_readback_stays_private_when_others_may_hear(world, room):
     assert world.pipeline.tts.spoken == [
         "Someone else might be listening. Check your phone to approve."
     ]
-    assert "Jake, fifty dollars." in world.pipeline.phone.sent[-1].text
+    assert "Jake, fifty dollars, to @jake-morales." in world.pipeline.phone.sent[-1].text
     assert world.approver.resolve(r.action.id, approve=True).status == "approved"
     assert r.action in world.pipeline.executor.executed
 
@@ -340,13 +356,19 @@ def test_money_readback_spoken_with_headphones(world):
     world.pipeline.audience = FixedAudience("others_present")
     world.pipeline.flags["headphones"] = True
     run(say(world, "yes"), "send fifty dollars to Jake")
-    assert world.pipeline.tts.spoken[0].startswith("Jake, fifty dollars.")
+    assert world.pipeline.tts.spoken[0].startswith("Jake, fifty dollars, to @jake-morales.")
 
 
-def test_food_readback_still_spoken_with_others(world):
+def test_order_with_unspoken_item_details_requires_phone_review(world):
     world.pipeline.audience = FixedAudience("others_present")
-    run(say(world, "yes"), "order my usual")
-    assert world.pipeline.tts.spoken[0] == "DoorDash, forty-three twenty, to home. Say yes."
+    r = run(world, "order my usual")
+    assert r.decision.outcome == "step_up"
+    assert (
+        world.pipeline.tts.spoken[0]
+        == "Please review all the details on your phone before approving."
+    )
+    assert "Chipotle" in world.pipeline.phone.sent[-1].text
+    assert "Chicken burrito bowl" in world.pipeline.phone.sent[-1].text
 
 
 def test_new_payee_readback_is_private_with_others(world):
@@ -355,4 +377,4 @@ def test_new_payee_readback_is_private_with_others(world):
     assert world.pipeline.tts.spoken == [
         "Someone else might be listening. Check your phone to approve."
     ]
-    assert "Priya, twenty dollars." in world.pipeline.phone.sent[-1].text
+    assert "Priya, twenty dollars, to @priya-shah." in world.pipeline.phone.sent[-1].text

@@ -166,7 +166,7 @@ class Approver:
         self, step: Step, ctx: TurnContext, reasons: list[str] | None = None
     ) -> ApprovalDecision:
         self._waiting[step.id] = ctx
-        ctx.phone.request_approval(step.id, step.phone_request)
+        ctx.phone.request_approval(step.id, step.phone_request, step.phone_details)
         return ApprovalDecision("step_up", reasons=reasons or list(step.reasons))
 
     def _forward(self, name: str, data: dict[str, Any]) -> None:

@@ -85,9 +85,10 @@ def test_phone_posts_ntfy_json_with_approval_buttons(events, monkeypatch):
         return httpx.Response(200, json={"id": "x"})
 
     phone = PhoneChannel(events, client=httpx.Client(transport=httpx.MockTransport(handler)))
-    d = phone.request_approval("abc123", "Jake, fifty dollars")
+    d = phone.request_approval("abc123", "Jake, fifty dollars", '{"amount":"50.00"}')
     body = seen[0]
     assert body["topic"] == "earshot-test" and d.extra["via"] == "ntfy"
+    assert '"amount":"50.00"' in body["message"]
     urls = [a["url"] for a in body["actions"]]
     assert urls == ["http://10.0.0.5:8000/approvals/abc123/approve",
                     "http://10.0.0.5:8000/approvals/abc123/deny"]  # fmt: skip

@@ -54,3 +54,20 @@ def test_every_field_is_covered_by_the_test_above():
 def test_actions_are_frozen():
     with pytest.raises(ValidationError):
         _action().amount = Decimal("1")
+
+
+def test_action_params_are_deeply_immutable_and_detached_from_input():
+    params = {"email": {"to": "jake@example.com"}, "labels": ["urgent"]}
+    action = _action(params=params)
+    params["email"]["to"] = "attacker@example.com"
+    assert action.params["email"]["to"] == "jake@example.com"
+    with pytest.raises(TypeError, match="immutable"):
+        action.params["email"]["to"] = "attacker@example.com"
+    with pytest.raises(TypeError):
+        action.params["labels"][0] = "changed"
+
+
+def test_model_copy_keeps_action_params_immutable():
+    copied = _action().model_copy(update={"params": {"nested": {"value": 1}}})
+    with pytest.raises(TypeError, match="immutable"):
+        copied.params["nested"]["value"] = 2

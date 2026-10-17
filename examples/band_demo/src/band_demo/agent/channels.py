@@ -70,11 +70,16 @@ class PhoneChannel:
     def notify(self, text: str, title: str = "earshot") -> Delivery:
         return self._send({"title": title, "message": text, "tags": ["lock"]}, text)
 
-    def request_approval(self, action_id: str, summary: str) -> Delivery:
+    def request_approval(
+        self, action_id: str, summary: str, details: str | None = None
+    ) -> Delivery:
         base = f"{self.public_url}/approvals/{action_id}"
+        message = summary
+        if details:
+            message = f"{summary}\n\nFull action details:\n{details}"
         payload = {
             "title": "Approve?",
-            "message": summary,
+            "message": message,
             "tags": ["warning"],
             "priority": 4,
             "actions": [
@@ -84,7 +89,7 @@ class PhoneChannel:
                  "method": "POST", "clear": True},
             ],
         }  # fmt: skip
-        return self._send(payload, summary, action_id=action_id)
+        return self._send(payload, message, action_id=action_id)
 
     def _send(self, payload: dict, text: str, **extra) -> Delivery:
         via = "console"

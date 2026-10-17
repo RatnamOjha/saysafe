@@ -4,6 +4,7 @@ Who, how much, where, anything unusual, then what to say. The body is capped at
 14 words and should take under 4 s at 2.6 words per second.
 """
 
+import json
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -62,9 +63,10 @@ def _body(a: Action) -> list[str]:
         return [", ".join(p for p in parts if p) + "."]
     if a.type == "send_money":
         new = ["New payee."] if a.is_new_counterparty else []
-        return [*new, f"{who}, {money}." if money else f"{who}."]
+        parts = [who, money, f"to {a.destination}" if a.destination else None]
+        return [*new, ", ".join(p for p in parts if p) + "."]
     if a.type == "cancel_subscription":
-        return [f"Cancel {who}?"]
+        return [f"Cancel {who}{', ' + money if money else ''}?"]
     if a.type == "book_appointment":
         when = a.params.get("when")
         return [f"Book {who}{', ' + when if when else ''}."]
@@ -75,8 +77,8 @@ def _body(a: Action) -> list[str]:
         return [f"Reminder: {a.params.get('what', '')}{' at ' + when if when else ''}."]
     # any other action type: "Unlock door: front door." / "Refund: Jake, fifty dollars."
     what = a.type.replace("_", " ").capitalize()
-    details = ", ".join(p for p in (who, money, a.destination) if p)
-    return [f"{what}: {details}." if details else f"{what}."]
+    rendered = ", ".join(p for p in (who, money, a.destination) if p)
+    return [f"{what}: {rendered}." if rendered else f"{what}."]
 
 
 def _instruction(tier: str, challenge_word: str | None, screen: str = "phone") -> str:
@@ -100,6 +102,48 @@ def summary(action: Action) -> str:
     if len(words) > MAX_BODY_WORDS:  # long names or params: keep the start, it has who and how much
         body = " ".join(words[:MAX_BODY_WORDS]).rstrip(",.") + "."
     return body
+
+
+def needs_phone_review(action: Action, risk: RiskAssessment, screen: str = "phone") -> bool:
+    """Whether the spoken read-back leaves out action details or is too long.
+
+    Voice approval is allowed only when this package knows how to say every
+    user-relevant field. Unknown parameters go to the phone for a complete review.
+    """
+    body = " ".join([*_SOURCE_PREFIX.get(action.source, "").split(), *_body(action)])
+    if len(body.split()) > MAX_BODY_WORDS:
+        return True
+    sample_word = "approval" if risk.tier == "voice_challenge" else None
+    if readback(action, risk, sample_word, screen).est_seconds >= 4.5:
+        return True
+
+    handled_params = {
+        "book_appointment": {"when"},
+        "set_reminder": {"what", "when"},
+    }.get(action.type, set())
+    if set(action.params) - handled_params:
+        return True
+
+    # These fields have meaning but aren't part of the corresponding spoken summary.
+    if action.type == "book_appointment" and (action.amount is not None or action.destination):
+        return True
+    if action.type == "set_reminder" and (
+        action.counterparty or action.amount is not None or action.destination
+    ):
+        return True
+    if action.type == "cancel_subscription" and action.destination:
+        return True
+    if action.type == "send_money" and action.is_new_counterparty:
+        return False  # explicitly spoken above
+    if action.type != "send_money" and action.is_new_counterparty:
+        return True
+    return False
+
+
+def phone_details(action: Action) -> str:
+    """Full, structured details for the host app to render on its approval screen."""
+    payload = action.model_dump(mode="json", exclude={"id", "created_at"})
+    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False)
 
 
 def readback(

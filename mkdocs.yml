@@ -26,7 +26,7 @@ nav:
       - Private replies: privacy.md
       - Approvals: approvals.md
       - Before you deploy: deployment.md
-      - Voice ID: voice.md
+      - Optional voice matching: voice.md
       - Pipecat: pipecat.md
   - Threat model: threat-model.md
   - Benchmarks: benchmarks.md

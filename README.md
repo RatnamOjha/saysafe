@@ -1,11 +1,13 @@
 # saysafe
 
-Privacy and approval guardrails for voice agents. Rules only: no models, no network.
+A Python safety layer for ambient voice agents: route sensitive replies privately and require explicit, action-bound approval before consequential tool calls.
+
+Rules only in the core: no models, no network.
 
 Voice agents speak out loud and act on what they hear. saysafe takes over two jobs a screen used to do:
 
 - **Who's listening.** A reply with a login code, a balance, a diagnosis or an address isn't read out when other people may hear. It's redacted or sent to the phone, and the rest is still said.
-- **Who's speaking.** Risky actions need proof scaled to the risk (the owner's voice, a one-time word, or a phone tap), and the approval is bound to the exact action, so the agent can't change the amount afterwards.
+- **Approval before actions.** Proof scales with the risk. Voice matching can be one clue; a one-time word or a phone tap adds stronger confirmation. The approval is bound to the exact action, so the agent can't change the amount afterwards.
 
 saysafe never touches the mic or the speaker. Your app passes text (and, optionally, voice scores) in and gets back what to say.
 
@@ -99,7 +101,7 @@ A "no" rejects. A voice that doesn't match, an unclear reply, or a wrong word st
 
 Before using this in a service, see [Before you deploy](docs/deployment.md) for storage, phone authentication, and executor requirements.
 
-## 3. Voice ID (optional)
+## 3. Optional voice matching (a supporting signal)
 
 ```python
 from saysafe import calibrate
@@ -184,7 +186,7 @@ If the classifier fails and no rule fired, the reply counts as personal, never p
 
 - English only, and the rules catch what they know. The optional classifier catches more.
 - Audio can't hear a silent person, so an unknown room is treated cautiously. Device signals beat guessing.
-- Voice ID is a convenience, not security: recordings and live voice clones can fool it. The one-time word stops recordings, and the phone tap is what to use for anything you can't afford to lose.
+- Voice matching is optional evidence, not identity proof: recordings and live voice clones can fool it. Use a phone tap for actions with serious consequences.
 - The phone tap is only as good as your phone channel: authenticate it.
 - Amounts are read back in dollars only, for now.
 - It doesn't make a product PCI or HIPAA compliant.

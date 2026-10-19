@@ -155,18 +155,23 @@ Room: OTHERS_PRESENT
   speaker: The Moon is about 384,400 kilometers (≈238,900 miles) from Earth on average.
 ```
 
-## The full safety flow
+## Small example host app
 
-To see approval and private reply routing together, run this offline example:
+Run a tiny assistant app that calls Saysafe at the two important points: before text
+reaches the speaker, and immediately before a tool action runs:
 
 ```bash
-uv run python examples/safety_layer.py
+uv run python examples/host_app.py
 ```
 
-It simulates a $25 transfer: Saysafe reads back the recipient and amount, checks the
-one-time voice challenge, verifies the token against the exact action before execution,
-then keeps the result private because other people are in the room. It uses fictional data;
-there is no microphone, phone service, LLM, or real transfer.
+Choose who might hear, then try a private bank-code reply or a $25 transfer. The host app
+pretends to be the assistant, bank tool, speaker, and phone. Saysafe's privacy and approval
+checks are real. If the transfer needs a phone tap, the example shows the full review
+details and stops because it has no authenticated phone channel. The voice score is also
+simulated; typing the challenge word is not voice or identity verification.
+
+Choose **Alone** to try the spoken challenge and fake transfer. Choose **Not sure** or
+**Other people may hear** to see Saysafe require private phone review instead.
 
 For a cell-by-cell walkthrough of privacy routing, approval, and changed-action refusal,
 open the [Saysafe notebook playground](examples/saysafe_playground.ipynb).

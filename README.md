@@ -168,6 +168,9 @@ one-time voice challenge, verifies the token against the exact action before exe
 then keeps the result private because other people are in the room. It uses fictional data;
 there is no microphone, phone service, LLM, or real transfer.
 
+For a cell-by-cell walkthrough of privacy routing, approval, and changed-action refusal,
+open the [Saysafe notebook playground](examples/saysafe_playground.ipynb).
+
 ## Optional LLM layers
 
 Rules catch the patterns they know ([sensitivity.yaml](https://github.com/RatnamOjha/saysafe/blob/main/src/saysafe/data/sensitivity.yaml)). Plug in any LLM for more:

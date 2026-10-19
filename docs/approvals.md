@@ -86,9 +86,9 @@ Actions whose `source` is `agent_initiated` or `from_content` need one tier more
 
 A read-back says the amount and the one-time word out loud. For `send_money` (configurable under `private_readback`), if the room isn't one where a sensitive reply may be said, the read-back goes to the phone instead: "Someone else might be listening. Check your phone to approve." Pass `room=` and `headphones=` to `start`, as for `PrivacyGuard`.
 
-## Voice scores
+## Optional voice scores
 
-`voice_score` is how much the reply sounds like the owner: cosine similarity to their voiceprint, from [saysafe.voice](voice.md) or your own model. `command_score` (optional) is the same for the spoken command, fused 0.4 / 0.6 with the reply. Either one under `t_reject` blocks an approval. Pass `None` when you couldn't score (too short, typed, nobody enrolled): the step then goes to the phone.
+`voice_score` is how much the reply sounds like the enrolled voice: cosine similarity to the voiceprint, from [optional voice matching](voice.md) or your own model. Treat this as one signal, not identity proof: recordings and live voice clones can fool speaker matching. `command_score` (optional) is the same for the spoken command, fused 0.4 / 0.6 with the reply. Either one under `t_reject` blocks an approval. Pass `None` when you couldn't score (too short, typed, nobody enrolled): the step then goes to the phone. Use `phone_tap` for high-impact actions.
 
 If your app knows who's speaking another way (a signed-in phone line, a paired device), `ApprovalGuard(..., require_voice_score=False)` lets a matching reply approve without a score. A score you do pass still counts.
 
@@ -102,3 +102,5 @@ If your app knows who's speaking another way (a signed-in phone line, a paired d
 ## The phone channel
 
 saysafe can't tell who pressed Approve. Authenticate your phone channel: a signed-in app session or a device key. An unauthenticated approve URL lets anyone who sees it approve.
+
+For production storage choices and the host app's other responsibilities, see [Before you deploy](deployment.md).

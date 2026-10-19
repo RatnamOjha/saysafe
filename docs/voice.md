@@ -1,4 +1,6 @@
-# Voice ID
+# Optional voice matching
+
+Voice matching is an optional supporting signal for approval and room awareness. It is not proof of identity, and it is not the main safety boundary. The core protections are private reply routing and approvals tied to the exact action. Use a phone tap for actions with serious consequences.
 
 Optional: `pip install "saysafe[voice]"`. ECAPA speaker embeddings ([speechbrain/spkrec-ecapa-voxceleb](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)) and Silero VAD, on CPU. The model downloads once (~80 MB) to `~/.cache/saysafe/ecapa`; after that nothing leaves the machine. Audio is 16 kHz mono `float32` numpy everywhere.
 

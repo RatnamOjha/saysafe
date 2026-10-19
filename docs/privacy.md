@@ -39,7 +39,7 @@ Speak `d.say`. When `d.send_to_phone` isn't `None`, deliver it privately.
 | Guest mode, passengers in the car, a meeting on the calendar | `room=Room.OTHERS_PRESENT` |
 | The user switched on private mode | `room=Room.ALONE` |
 | Nothing known | `room=Room.UNKNOWN` (the default: cautious) |
-| Voice ID: other voices heard in the last 45 s | `room=tracker.room()` ([Voice ID](voice.md)) |
+| Voice matching: other voices heard in the last 45 s | `room=tracker.room()` ([optional voice matching](voice.md)) |
 
 `discreet=True` (a user setting) or `whisper=True` (the user whispered) keeps anything personal or above off the speaker, whoever is around.
 

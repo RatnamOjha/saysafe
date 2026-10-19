@@ -1,11 +1,13 @@
 # saysafe
 
-Privacy and approval guardrails for voice agents. Rules only: no models, no network.
+A Python safety layer for ambient voice agents: route sensitive replies privately and require explicit, action-bound approval before consequential tool calls.
+
+Rules only in the core: no models, no network.
 
 Voice agents speak out loud and act on what they hear. saysafe takes over two jobs a screen used to do:
 
 - **Who's listening.** A reply with a login code, a balance, a diagnosis or an address isn't read out when other people may hear. It's redacted or sent to the phone, and the rest is still said.
-- **Who's speaking.** Risky actions need proof scaled to the risk (the owner's voice, a one-time word, or a phone tap), and the approval is bound to the exact action, so the agent can't change the amount afterwards.
+- **Approval before actions.** Proof scales with the risk. Voice matching can be one clue; a one-time word or a phone tap adds stronger confirmation. The approval is bound to the exact action, so the agent can't change the amount afterwards.
 
 saysafe never touches the mic or the speaker. Your app passes text (and, optionally, voice scores) in and gets back what to say.
 
@@ -97,7 +99,9 @@ approvals = ApprovalGuard(secret, policy={"rules": [
 
 A "no" rejects. A voice that doesn't match, an unclear reply, or a wrong word steps up to the phone. Actions that came from an email or web page (`source="from_content"`) need one tier more. A money read-back isn't said out loud when others may hear; it goes to the phone. If your app knows who's speaking another way (a signed-in phone line), pass `require_voice_score=False`.
 
-## 3. Voice ID (optional)
+Before using this in a service, see [Before you deploy](docs/deployment.md) for storage, phone authentication, and executor requirements.
+
+## 3. Optional voice matching (a supporting signal)
 
 ```python
 from saysafe import calibrate
@@ -151,6 +155,22 @@ Room: OTHERS_PRESENT
   speaker: The Moon is about 384,400 kilometers (≈238,900 miles) from Earth on average.
 ```
 
+## The full safety flow
+
+To see approval and private reply routing together, run this offline example:
+
+```bash
+uv run python examples/safety_layer.py
+```
+
+It simulates a $25 transfer: Saysafe reads back the recipient and amount, checks the
+one-time voice challenge, verifies the token against the exact action before execution,
+then keeps the result private because other people are in the room. It uses fictional data;
+there is no microphone, phone service, LLM, or real transfer.
+
+For a cell-by-cell walkthrough of privacy routing, approval, and changed-action refusal,
+open the [Saysafe notebook playground](examples/saysafe_playground.ipynb).
+
 ## Optional LLM layers
 
 Rules catch the patterns they know ([sensitivity.yaml](https://github.com/RatnamOjha/saysafe/blob/main/src/saysafe/data/sensitivity.yaml)). Plug in any LLM for more:
@@ -169,7 +189,7 @@ If the classifier fails and no rule fired, the reply counts as personal, never p
 
 - English only, and the rules catch what they know. The optional classifier catches more.
 - Audio can't hear a silent person, so an unknown room is treated cautiously. Device signals beat guessing.
-- Voice ID is a convenience, not security: recordings and live voice clones can fool it. The one-time word stops recordings, and the phone tap is what to use for anything you can't afford to lose.
+- Voice matching is optional evidence, not identity proof: recordings and live voice clones can fool it. Use a phone tap for actions with serious consequences.
 - The phone tap is only as good as your phone channel: authenticate it.
 - Amounts are read back in dollars only, for now.
 - It doesn't make a product PCI or HIPAA compliant.

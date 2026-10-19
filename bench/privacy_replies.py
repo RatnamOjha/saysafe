@@ -2,9 +2,9 @@
 
     uv run python bench/privacy_replies.py
 
-Reads bench/data/replies.yaml (or eval/data/replies.yaml while it's being reviewed), and
-uses only items a person has reviewed (`reviewed: true`). With none reviewed it reports
-nothing: unreviewed labels are an LLM's guesses, and numbers on them would be too.
+Reads bench/data/replies.yaml (or eval/data/replies.yaml while it's being reviewed). It
+reports metrics only when a person has reviewed every remaining item. Unreviewed labels
+are model guesses, and a partial set could give a misleadingly favorable result.
 
 The rules were frozen before this set was generated, and nobody tuned them on it.
 Replies are judged on their text alone (no source hints), which is stricter than a real
@@ -89,17 +89,22 @@ def evaluate(items: list[dict]) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=ROOT / "bench" / "results" / "privacy.json")
+    ap.add_argument("--data", type=Path, help="dataset to evaluate (defaults to the reviewed set)")
     args = ap.parse_args()
-    path = next((p for p in CANDIDATES if p.exists()), None)
+    path = args.data or next((p for p in CANDIDATES if p.exists()), None)
     if path is None:
         result = {"status": "no dataset"}
     else:
-        items = yaml.safe_load(path.read_text())
+        items = yaml.safe_load(path.read_text()) or []
         reviewed = [i for i in items if i.get("reviewed")]
-        result = {"status": "waiting for reviewed labels"} if not reviewed else {"status": "ok"}
-        result.update(dataset=str(path.relative_to(ROOT)), reviewed=len(reviewed),
-                      total=len(items))  # fmt: skip
-        if reviewed:
+        complete = bool(items) and len(reviewed) == len(items)
+        result = {"status": "ok" if complete else "waiting for reviewed labels"}
+        try:
+            dataset = str(path.resolve().relative_to(ROOT))
+        except ValueError:
+            dataset = str(path.resolve())
+        result.update(dataset=dataset, reviewed=len(reviewed), total=len(items))
+        if complete:
             result.update(evaluate(reviewed))
     result["generated"] = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     args.out.parent.mkdir(parents=True, exist_ok=True)
